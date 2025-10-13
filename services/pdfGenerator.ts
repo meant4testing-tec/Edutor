@@ -1,4 +1,3 @@
-
 import { Profile, Medicine, Schedule, DoseStatus } from '../types';
 
 declare const jspdf: any;
@@ -9,6 +8,18 @@ interface ReportData {
   schedules: Schedule[];
   startDate: Date;
   endDate: Date;
+}
+
+const addImageToDoc = (doc: any, imageData: string, x: number, y: number, w: number, h: number) => {
+    try {
+        const img = new Image();
+        img.src = imageData;
+        const format = imageData.split(';')[0].split('/')[1].toUpperCase();
+        doc.addImage(img, format, x, y, w, h);
+    } catch(e) {
+        console.error("Failed to add image to PDF", e);
+        doc.text('Image could not be loaded', x, y);
+    }
 }
 
 export const generatePDFReport = async (data: ReportData): Promise<void> => {
@@ -28,15 +39,11 @@ export const generatePDFReport = async (data: ReportData): Promise<void> => {
   doc.text(`Report Period: ${startDate.toLocaleDateString()} - ${endDate.toLocaleDateString()}`, 14, 42);
   
   if (profile.picture) {
-    try {
-        doc.addImage(profile.picture, 'JPEG', 160, 28, 35, 35);
-    } catch(e) {
-        console.error("Failed to add profile picture to PDF", e);
-    }
+    addImageToDoc(doc, profile.picture, 160, 28, 35, 35);
   }
 
   // Compliance Score
-  const totalDoses = schedules.length;
+  const totalDoses = schedules.filter(s => s.status === DoseStatus.TAKEN || s.status === DoseStatus.SKIPPED).length;
   const takenDoses = schedules.filter(s => s.status === DoseStatus.TAKEN).length;
   const complianceRate = totalDoses > 0 ? ((takenDoses / totalDoses) * 100).toFixed(1) : 'N/A';
   doc.setFontSize(14);
@@ -46,8 +53,6 @@ export const generatePDFReport = async (data: ReportData): Promise<void> => {
   doc.line(14, 65, 196, 65);
 
   let yPos = 75;
-
-  const medicineMap = new Map<string, Medicine>(medicines.map(m => [m.id, m]));
 
   for (const medicine of medicines) {
     const medicineSchedules = schedules.filter(s => s.medicineId === medicine.id);
@@ -72,17 +77,26 @@ export const generatePDFReport = async (data: ReportData): Promise<void> => {
         yPos += 5;
     }
 
-    if (medicine.prescriptionImage) {
-        if (yPos > 180) { // Check if there's enough space for image and table
+    const hasPrescriptionImg = !!medicine.prescriptionImage;
+    const hasMedicineImg = !!medicine.medicineImage;
+    if (hasPrescriptionImg || hasMedicineImg) {
+       if (yPos > 200) { 
             doc.addPage();
             yPos = 20;
-        }
-        try {
-            doc.addImage(medicine.prescriptionImage, 'JPEG', 14, yPos, 60, 40);
-        } catch(e) {
-            console.error("Error adding prescription image", e);
-        }
-        yPos += 45;
+       }
+       let currentX = 14;
+       if(hasMedicineImg) {
+           doc.setFontSize(9);
+           doc.text('Medicine Image:', currentX, yPos);
+           addImageToDoc(doc, medicine.medicineImage!, currentX, yPos + 2, 40, 40);
+           currentX += 50;
+       }
+       if(hasPrescriptionImg) {
+           doc.setFontSize(9);
+           doc.text('Prescription:', currentX, yPos);
+           addImageToDoc(doc, medicine.prescriptionImage!, currentX, yPos + 2, 60, 40);
+       }
+       yPos += 48;
     }
     
     const tableBody = medicineSchedules
@@ -108,7 +122,7 @@ export const generatePDFReport = async (data: ReportData): Promise<void> => {
       }
     });
 
-    yPos = doc.previousAutoTable.finalY + 10;
+    yPos = (doc as any).previousAutoTable.finalY + 10;
   }
 
 

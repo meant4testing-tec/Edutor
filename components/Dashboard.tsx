@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Profile, Medicine, Schedule, DoseStatus } from '../types';
 import { db } from '../services/db';

@@ -1,10 +1,10 @@
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { db } from './services/db';
-import { Profile, Schedule, DoseStatus, View } from './types';
+import { Profile, Schedule, DoseStatus, View, Medicine } from './types';
 import Header from './components/Header';
-import ProfileSelector from './components/ProfileSelector';
+import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import HistoryView from './components/HistoryView';
 import TermsModal from './components/TermsModal';
@@ -19,7 +19,9 @@ const App: React.FC = () => {
   const [view, setView] = useState<View>(View.DASHBOARD);
   const [loading, setLoading] = useState(true);
   const [showTerms, setShowTerms] = useState(false);
+  const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [dueSchedules, setDueSchedules] = useState<Schedule[]>([]);
+  const notifiedSchedulesRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (theme === 'dark') {
@@ -29,14 +31,20 @@ const App: React.FC = () => {
     }
   }, [theme]);
 
-  const fetchProfiles = useCallback(async () => {
+  useEffect(() => {
+    if (termsAccepted && Notification.permission !== 'granted') {
+      Notification.requestPermission();
+    }
+  }, [termsAccepted]);
+
+  const fetchProfiles = useCallback(async (profileToSelectId?: string) => {
     try {
       setLoading(true);
       const allProfiles = await db.profiles.getAll();
       setProfiles(allProfiles);
       if (allProfiles.length > 0) {
-        const lastSelectedProfileId = localStorage.getItem('selectedProfileId');
-        const profileToSelect = lastSelectedProfileId ? allProfiles.find(p => p.id === lastSelectedProfileId) : allProfiles[0];
+        const idToSelect = profileToSelectId || localStorage.getItem('selectedProfileId');
+        const profileToSelect = idToSelect ? allProfiles.find(p => p.id === idToSelect) : allProfiles[0];
         setSelectedProfile(profileToSelect || allProfiles[0]);
       } else {
         setSelectedProfile(null);
@@ -55,35 +63,58 @@ const App: React.FC = () => {
   useEffect(() => {
     if (selectedProfile?.id) {
         localStorage.setItem('selectedProfileId', selectedProfile.id);
+    } else if (profiles.length === 0) {
+        localStorage.removeItem('selectedProfileId');
     }
-  }, [selectedProfile]);
+  }, [selectedProfile, profiles]);
 
   const handleProfileSelect = (profile: Profile | null) => {
     setSelectedProfile(profile);
     setView(View.DASHBOARD);
+    setSidebarOpen(false);
   };
 
   const checkDueSchedules = useCallback(async () => {
     if (!termsAccepted) return;
     try {
       const now = new Date().toISOString();
-      const pendingSchedules = await db.schedules.getAll();
-      const due = pendingSchedules.filter(s => s.status === DoseStatus.PENDING && s.scheduledTime <= now);
+      const allSchedules = await db.schedules.getAll();
+      const due = allSchedules.filter(s => s.status === DoseStatus.PENDING && s.scheduledTime <= now);
+      
       if (due.length > 0) {
-        const profilesForDueSchedules = await Promise.all(
-          due.map(s => db.profiles.get(s.profileId))
+        const schedulesWithDetails = await Promise.all(
+          due.map(async (schedule) => {
+            const [profile, medicine] = await Promise.all([
+              db.profiles.get(schedule.profileId),
+              db.medicines.get(schedule.medicineId),
+            ]);
+            return {
+              ...schedule,
+              profileName: profile?.name || 'Unknown Profile',
+              medicineName: medicine?.name || 'Unknown Medicine',
+            };
+          })
         );
-        const dueWithProfile = due.map((schedule, index) => ({
-            ...schedule,
-            profileName: profilesForDueSchedules[index]?.name || 'Unknown Profile'
-        }));
+
+        schedulesWithDetails.forEach(s => {
+          if (!notifiedSchedulesRef.current.has(s.id) && Notification.permission === 'granted') {
+            // FIX: Object literal may only specify known properties, and 'vibrate' does not exist in type 'NotificationOptions'.
+            new Notification('Time for your medication!', {
+              body: `${s.profileName}: It's time to take ${s.medicineName}.`,
+              icon: '/vite.svg', // Optional: Add an app icon
+            });
+            notifiedSchedulesRef.current.add(s.id);
+          }
+        });
         
-        // Only update if there's a change to prevent re-renders
-        if (JSON.stringify(dueWithProfile) !== JSON.stringify(dueSchedules)) {
-             setDueSchedules(dueWithProfile);
+        // Only update state if there's a change to prevent re-renders
+        if (JSON.stringify(schedulesWithDetails) !== JSON.stringify(dueSchedules)) {
+             setDueSchedules(schedulesWithDetails);
         }
       } else {
-          setDueSchedules([]);
+          if(dueSchedules.length > 0) {
+            setDueSchedules([]);
+          }
       }
     } catch (error) {
       console.error("Error checking for due schedules:", error);
@@ -91,10 +122,9 @@ const App: React.FC = () => {
   }, [termsAccepted, dueSchedules]);
   
   useEffect(() => {
-    const interval = setInterval(checkDueSchedules, 5000); // Check every 5 seconds
+    const interval = setInterval(checkDueSchedules, 5000);
     return () => clearInterval(interval);
   }, [checkDueSchedules]);
-
 
   const handleUpdateSchedule = async (scheduleId: string, status: DoseStatus.TAKEN | DoseStatus.SKIPPED) => {
     const schedule = await db.schedules.get(scheduleId);
@@ -104,6 +134,7 @@ const App: React.FC = () => {
         status,
         actualTakenTime: status === DoseStatus.TAKEN ? new Date().toISOString() : null,
       });
+      notifiedSchedulesRef.current.delete(scheduleId);
       setDueSchedules(prev => prev.filter(s => s.id !== scheduleId));
     }
   };
@@ -115,10 +146,9 @@ const App: React.FC = () => {
 
     if (!selectedProfile) {
       return (
-        <div className="flex flex-col items-center justify-center h-full p-4">
+        <div className="flex flex-col items-center justify-center h-full p-4 text-center">
             <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-200 mb-4">Welcome to Medicine Reminder</h2>
-            <p className="text-gray-600 dark:text-gray-400 mb-6 text-center">Please create a profile to get started.</p>
-            <ProfileSelector profiles={profiles} onProfileSelect={handleProfileSelect} onProfilesUpdate={fetchProfiles} selectedProfile={null} />
+            <p className="text-gray-600 dark:text-gray-400">Create a profile from the sidebar to get started.</p>
         </div>
       );
     }
@@ -136,39 +166,45 @@ const App: React.FC = () => {
 
   return (
     <div className={`min-h-screen font-sans transition-colors duration-300 ${theme}`}>
-        <div className="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 min-h-screen flex flex-col">
-        {!termsAccepted && <TermsModal onAccept={() => setTermsAccepted(true)} />}
-        {showTerms && <TermsModal onAccept={() => setShowTerms(false)} isReopened={true} />}
+        <div className="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 min-h-screen flex">
+            {!termsAccepted && <TermsModal onAccept={() => setTermsAccepted(true)} />}
+            {showTerms && <TermsModal onAccept={() => setShowTerms(false)} isReopened={true} />}
         
-        <div className="fixed top-0 left-0 right-0 z-30 p-4 space-y-2">
-            {dueSchedules.map(schedule => (
-                <AlarmBanner key={schedule.id} schedule={schedule} onUpdate={handleUpdateSchedule} />
-            ))}
-        </div>
-        
-        <MemoizedHeader 
-            theme={theme} 
-            onToggleTheme={() => setTheme(theme === 'light' ? 'dark' : 'light')} 
-            onShowTerms={() => setShowTerms(true)}
-            view={view}
-            setView={setView}
+            <Sidebar 
+                isOpen={isSidebarOpen}
+                onClose={() => setSidebarOpen(false)}
+                view={view}
+                setView={setView}
+                profiles={profiles}
+                selectedProfile={selectedProfile}
+                onProfileSelect={handleProfileSelect}
+                onProfilesUpdate={fetchProfiles}
             />
-        
-        <main className="flex-grow pt-28 md:pt-20 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full">
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-            <div className="lg:col-span-1">
-                <ProfileSelector profiles={profiles} selectedProfile={selectedProfile} onProfileSelect={handleProfileSelect} onProfilesUpdate={fetchProfiles} />
+
+            <div className="flex-1 flex flex-col transition-all duration-300">
+                <MemoizedHeader 
+                    theme={theme} 
+                    onToggleTheme={() => setTheme(theme === 'light' ? 'dark' : 'light')} 
+                    onShowTerms={() => setShowTerms(true)}
+                    onToggleSidebar={() => setSidebarOpen(!isSidebarOpen)}
+                />
+
+                <main className="flex-grow pt-20 p-4 sm:p-6 lg:p-8 w-full">
+                     <div className="fixed top-20 left-0 right-0 z-30 p-4 space-y-2">
+                        {dueSchedules.map(schedule => (
+                            <AlarmBanner key={schedule.id} schedule={schedule} onUpdate={handleUpdateSchedule} />
+                        ))}
+                    </div>
+
+                    <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-4 sm:p-6 mt-8">
+                        {termsAccepted ? renderContent() : <p className="text-center">Please accept the terms to use the app.</p>}
+                    </div>
+                </main>
+
+                <footer className="text-center py-4">
+                    <p className="text-xs text-gray-500 dark:text-gray-600">Powered by {DEVELOPER_NAME}</p>
+                </footer>
             </div>
-            <div className="lg:col-span-3">
-                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-4 sm:p-6">
-                    {termsAccepted ? renderContent() : <p className="text-center">Please accept the terms to use the app.</p>}
-                </div>
-            </div>
-            </div>
-        </main>
-        <footer className="text-center py-4">
-            <p className="text-xs text-gray-500 dark:text-gray-600">Powered by {DEVELOPER_NAME}</p>
-        </footer>
         </div>
     </div>
   );

@@ -1,8 +1,8 @@
-
 export interface Profile {
   id: string;
   name: string;
   picture: string; // base64 encoded image
+  dob: string; // ISO string date
   wakeTime: string; // HH:mm format
   sleepTime: string; // HH:mm format
 }
@@ -14,9 +14,11 @@ export interface Medicine {
   dose: string;
   courseDays: number;
   instructions: Instruction;
+  customInstructions?: string;
   frequencyType: FrequencyType;
   frequencyValue: number; // e.g., 3 for "3 times a day", 8 for "every 8 hours"
-  prescriptionImage: string | null; // base64 encoded image
+  prescriptionImage?: string; // base64 encoded image
+  medicineImage?: string; // base64 encoded image
   startDate: string; // ISO string
   doctorName?: string;
 }
@@ -29,6 +31,7 @@ export interface Schedule {
   status: DoseStatus;
   actualTakenTime: string | null; // ISO string
   profileName?: string;
+  medicineName?: string;
 }
 
 export enum DoseStatus {

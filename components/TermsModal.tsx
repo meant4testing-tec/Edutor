@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { TERMS_OF_USE, DEVELOPER_NAME } from '../constants';
 
@@ -10,6 +9,15 @@ interface TermsModalProps {
 const TermsModal: React.FC<TermsModalProps> = ({ onAccept, isReopened = false }) => {
   const [isChecked, setIsChecked] = useState(false);
 
+  const renderTerms = () => {
+    return TERMS_OF_USE.split(/(<bold>.*?<\/bold>)/g).map((part, index) => {
+        if (part.startsWith('<bold>')) {
+            return <strong key={index} className="font-bold text-primary-600 dark:text-primary-400 block mt-2">{part.replace(/<\/?bold>/g, '')}</strong>;
+        }
+        return <React.Fragment key={index}>{part}</React.Fragment>;
+    });
+  };
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full flex flex-col max-h-[90vh]">
@@ -18,7 +26,7 @@ const TermsModal: React.FC<TermsModalProps> = ({ onAccept, isReopened = false })
           <p className="text-sm text-gray-500 dark:text-gray-400">Developed by {DEVELOPER_NAME}</p>
         </div>
         <div className="p-6 overflow-y-auto">
-          <pre className="whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300 font-sans">{TERMS_OF_USE}</pre>
+          <div className="whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300 font-sans">{renderTerms()}</div>
         </div>
         <div className="p-6 border-t border-gray-200 dark:border-gray-700">
           {!isReopened && (
@@ -53,4 +61,3 @@ const TermsModal: React.FC<TermsModalProps> = ({ onAccept, isReopened = false })
 };
 
 export default TermsModal;
-   
