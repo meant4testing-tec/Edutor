@@ -121,8 +121,8 @@ const AddMedicineModal: React.FC<AddMedicineModalProps> = ({ profile, onClose, o
       customInstructions: customInstructions.trim() ? customInstructions.trim() : undefined,
       frequencyType,
       frequencyValue,
-      prescriptionImage,
-      medicineImage,
+      prescriptionImage: prescriptionImage || undefined,
+      medicineImage: medicineImage || undefined,
       startDate: new Date().toISOString(),
       doctorName: doctorName.trim() ? doctorName.trim() : undefined
     };
@@ -138,70 +138,84 @@ const AddMedicineModal: React.FC<AddMedicineModalProps> = ({ profile, onClose, o
     onClose();
   };
 
+  const FormInput: React.FC<React.InputHTMLAttributes<HTMLInputElement> & {label: string}> = ({label, ...props}) => (
+    <div>
+        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}</label>
+        <input {...props} className="mt-1 w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-50 dark:bg-gray-700" />
+    </div>
+  );
+
+  const FormSelect: React.FC<React.SelectHTMLAttributes<HTMLSelectElement> & {label: string, children: React.ReactNode}> = ({label, children, ...props}) => (
+    <div>
+        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}</label>
+        <select {...props} className="mt-1 w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-50 dark:bg-gray-700">
+            {children}
+        </select>
+    </div>
+  );
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-lg w-full flex flex-col max-h-[90vh]">
-        <h2 className="text-2xl font-bold p-6 border-b border-gray-200 dark:border-gray-700">Add New Medicine</h2>
-        <div className="p-6 space-y-4 overflow-y-auto">
-          <div>
-            <label className="text-sm font-medium">Medicine Name & Dose *</label>
-            <div className="flex space-x-2">
-                <input type="text" placeholder="e.g., Ibuprofen" value={name} onChange={e => setName(e.target.value)} className="mt-1 w-2/3 p-2 border rounded-md bg-gray-50 dark:bg-gray-700 dark:border-gray-600" />
-                <input type="text" placeholder="e.g., 200mg" value={dose} onChange={e => setDose(e.target.value)} className="mt-1 w-1/3 p-2 border rounded-md bg-gray-50 dark:bg-gray-700 dark:border-gray-600" />
+        <h2 className="text-2xl font-bold p-6 border-b border-gray-200 dark:border-gray-700">Add New Medicine for {profile.name}</h2>
+        <div className="p-6 space-y-6 overflow-y-auto">
+          
+          <fieldset className="space-y-4">
+            <legend className="text-lg font-semibold text-primary-600 dark:text-primary-400">Medicine Details</legend>
+            <div className="grid grid-cols-3 gap-2">
+                <div className="col-span-2"><FormInput label="Medicine Name *" type="text" placeholder="e.g., Ibuprofen" value={name} onChange={e => setName(e.target.value)} /></div>
+                <div><FormInput label="Dose *" type="text" placeholder="e.g., 200mg" value={dose} onChange={e => setDose(e.target.value)} /></div>
             </div>
-          </div>
-           <div>
-            <label className="text-sm font-medium">Doctor's Name (Optional)</label>
-            <input type="text" placeholder="e.g., Dr. Smith" value={doctorName} onChange={e => setDoctorName(e.target.value)} className="mt-1 w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-700 dark:border-gray-600" />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium">Course Duration (days) *</label>
-                <input type="number" placeholder="e.g., 7" value={courseDays} onChange={e => setCourseDays(parseInt(e.target.value))} className="mt-1 w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-700 dark:border-gray-600" />
-              </div>
-              <div>
-                <label className="text-sm font-medium">Instructions *</label>
-                <select value={instructions} onChange={e => setInstructions(e.target.value as Instruction)} className="mt-1 w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-700 dark:border-gray-600">
+            <FormInput label="Doctor's Name (Optional)" type="text" placeholder="e.g., Dr. Smith" value={doctorName} onChange={e => setDoctorName(e.target.value)} />
+          </fieldset>
+
+          <fieldset className="space-y-4">
+            <legend className="text-lg font-semibold text-primary-600 dark:text-primary-400">Schedule & Instructions</legend>
+            <div className="grid grid-cols-2 gap-4">
+                <FormInput label="Course Duration (days) *" type="number" placeholder="e.g., 7" value={courseDays} onChange={e => setCourseDays(parseInt(e.target.value))} />
+                <FormSelect label="Instructions *" value={instructions} onChange={e => setInstructions(e.target.value as Instruction)}>
                     {Object.values(Instruction).map(val => <option key={val} value={val}>{val}</option>)}
-                </select>
-              </div>
-          </div>
-           <div>
-              <label className="text-sm font-medium">Usage Instructions (if any)</label>
-              <textarea placeholder="e.g., Dissolve in a glass of warm water." value={customInstructions} onChange={e => setCustomInstructions(e.target.value)} rows={2} className="mt-1 w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-700 dark:border-gray-600" />
+                </FormSelect>
             </div>
-          <div>
-            <label className="text-sm font-medium">Frequency *</label>
-            <div className="flex space-x-2 mt-1">
-                <select value={frequencyType} onChange={e => setFrequencyType(e.target.value as FrequencyType)} className="w-1/2 p-2 border rounded-md bg-gray-50 dark:bg-gray-700 dark:border-gray-600">
-                     {Object.values(FrequencyType).map(val => <option key={val} value={val}>{val}</option>)}
-                </select>
-                <input type="number" placeholder={frequencyType === FrequencyType.TIMES_A_DAY ? "e.g., 3" : "e.g., 8"} value={frequencyValue} onChange={e => setFrequencyValue(parseInt(e.target.value))} className="w-1/2 p-2 border rounded-md bg-gray-50 dark:bg-gray-700 dark:border-gray-600" />
-            </div>
-             { instructions === Instruction.BEFORE_SLEEP && <p className="text-xs text-yellow-600 mt-1">Frequency is ignored for 'Before Sleep' instructions.</p>}
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="text-sm font-medium">Medicine Image</label>
-              <div className="mt-1 p-2 border-2 border-dashed rounded-md flex flex-col items-center justify-center h-32">
-                {medicineImage ? <img src={medicineImage} alt="Medicine" className="max-h-20 rounded-md" /> : <p className="text-gray-500 text-xs text-center">No image uploaded</p>}
-                <button onClick={() => medicineFileInputRef.current?.click()} className="mt-2 text-sm text-primary-600 hover:underline">Upload</button>
-                <input type="file" ref={medicineFileInputRef} onChange={(e) => handleFileChange(e, 'medicine')} accept="image/*" className="hidden" />
-              </div>
+             <div>
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Custom Instructions (if any)</label>
+                <textarea placeholder="e.g., Dissolve in a glass of warm water." value={customInstructions} onChange={e => setCustomInstructions(e.target.value)} rows={2} className="mt-1 w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-50 dark:bg-gray-700" />
             </div>
             <div>
-                <label className="text-sm font-medium">Prescription Image</label>
-                <div className="mt-1 p-2 border-2 border-dashed rounded-md flex flex-col items-center justify-center h-32">
-                {prescriptionImage ? <img src={prescriptionImage} alt="Prescription" className="max-h-20 rounded-md" /> : <p className="text-gray-500 text-xs text-center">No image uploaded</p>}
-                <button onClick={() => prescriptionFileInputRef.current?.click()} className="mt-2 text-sm text-primary-600 hover:underline">Upload</button>
-                <input type="file" ref={prescriptionFileInputRef} onChange={(e) => handleFileChange(e, 'prescription')} accept="image/*" className="hidden" />
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Frequency *</label>
+              <div className="flex space-x-2 mt-1">
+                  <select value={frequencyType} onChange={e => setFrequencyType(e.target.value as FrequencyType)} className="w-1/2 p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-50 dark:bg-gray-700">
+                       {Object.values(FrequencyType).map(val => <option key={val} value={val}>{val}</option>)}
+                  </select>
+                  <input type="number" placeholder={frequencyType === FrequencyType.TIMES_A_DAY ? "e.g., 3" : "e.g., 8"} value={frequencyValue} onChange={e => setFrequencyValue(parseInt(e.target.value))} className="w-1/2 p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-50 dark:bg-gray-700" />
+              </div>
+              { instructions === Instruction.BEFORE_SLEEP && <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">Frequency is ignored for 'Before Sleep' instructions.</p>}
+            </div>
+          </fieldset>
+         
+          <fieldset>
+             <legend className="text-lg font-semibold text-primary-600 dark:text-primary-400 mb-2">Attachments</legend>
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {[
+                { type: 'medicine', title: 'Medicine Image', file: medicineImage, ref: medicineFileInputRef, handler: (e: ChangeEvent<HTMLInputElement>) => handleFileChange(e, 'medicine') },
+                { type: 'prescription', title: 'Prescription Image', file: prescriptionImage, ref: prescriptionFileInputRef, handler: (e: ChangeEvent<HTMLInputElement>) => handleFileChange(e, 'prescription') }
+              ].map(item => (
+                <div key={item.type}>
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">{item.title}</label>
+                  <div className="mt-1 p-2 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-md flex flex-col items-center justify-center h-32 bg-gray-50 dark:bg-gray-700/50">
+                    {item.file ? <img src={item.file} alt={item.title} className="max-h-20 rounded-md object-contain" /> : <p className="text-gray-500 text-xs text-center">No image uploaded</p>}
+                    <button onClick={() => item.ref.current?.click()} className="mt-2 text-sm text-primary-600 hover:underline">Upload Image</button>
+                    <input type="file" ref={item.ref} onChange={item.handler} accept="image/*" className="hidden" />
+                  </div>
                 </div>
+              ))}
             </div>
-          </div>
+          </fieldset>
+
         </div>
         <div className="p-4 flex justify-end space-x-2 border-t border-gray-200 dark:border-gray-700">
           <button onClick={onClose} className="px-4 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700">Cancel</button>
-          <button onClick={handleSubmit} className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700">Save Medicine</button>
+          <button onClick={handleSubmit} className="px-4 py-2 bg-primary-600 text-white font-bold rounded-md hover:bg-primary-700">Save Medicine</button>
         </div>
       </div>
     </div>

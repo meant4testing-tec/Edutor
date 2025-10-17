@@ -7,6 +7,50 @@ interface DashboardProps {
   profile: Profile;
 }
 
+const AdherenceRing: React.FC<{ percentage: number }> = ({ percentage }) => {
+    const size = 80;
+    const strokeWidth = 8;
+    const radius = (size - strokeWidth) / 2;
+    const circumference = radius * 2 * Math.PI;
+    const offset = circumference - (percentage / 100) * circumference;
+
+    let colorClass = 'text-green-500';
+    if (percentage < 75) colorClass = 'text-yellow-500';
+    if (percentage < 50) colorClass = 'text-red-500';
+
+    return (
+        <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
+            <svg className="transform -rotate-90" width={size} height={size}>
+                <circle
+                    className="text-gray-200 dark:text-gray-700"
+                    stroke="currentColor"
+                    strokeWidth={strokeWidth}
+                    fill="transparent"
+                    r={radius}
+                    cx={size / 2}
+                    cy={size / 2}
+                />
+                <circle
+                    className={`${colorClass} transition-all duration-500`}
+                    stroke="currentColor"
+                    strokeWidth={strokeWidth}
+                    strokeDasharray={circumference}
+                    strokeDashoffset={offset}
+                    strokeLinecap="round"
+                    fill="transparent"
+                    r={radius}
+                    cx={size / 2}
+                    cy={size / 2}
+                />
+            </svg>
+            <span className={`absolute text-xl font-bold ${colorClass}`}>
+                {percentage}%
+            </span>
+        </div>
+    );
+};
+
+
 const Dashboard: React.FC<DashboardProps> = ({ profile }) => {
   const [medicines, setMedicines] = useState<Medicine[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
@@ -40,14 +84,15 @@ const Dashboard: React.FC<DashboardProps> = ({ profile }) => {
   }, [fetchData]);
   
   const handleUpdateSchedule = async (scheduleId: string, status: DoseStatus.TAKEN | DoseStatus.SKIPPED) => {
-    const schedule = await db.schedules.get(scheduleId);
+    const schedule = schedules.find(s => s.id === scheduleId);
     if (schedule) {
       await db.schedules.update({
         ...schedule,
         status,
         actualTakenTime: status === DoseStatus.TAKEN ? new Date().toISOString() : null,
       });
-      fetchData(); // Refresh data
+      // Optimistic update
+      setSchedules(schedules.map(s => s.id === scheduleId ? {...s, status } : s));
     }
   };
 
@@ -64,9 +109,10 @@ const Dashboard: React.FC<DashboardProps> = ({ profile }) => {
   }, [schedules]);
 
   const adherence = useMemo(() => {
-    const taken = schedules.filter(s => s.status === DoseStatus.TAKEN).length;
-    const totalPast = schedules.filter(s => new Date(s.scheduledTime) < new Date() && (s.status === DoseStatus.TAKEN || s.status === DoseStatus.SKIPPED || s.status === DoseStatus.OVERDUE)).length;
-    return totalPast > 0 ? Math.round((taken / totalPast) * 100) : 100;
+    const relevantSchedules = schedules.filter(s => new Date(s.scheduledTime) < new Date() && s.status !== DoseStatus.PENDING);
+    if(relevantSchedules.length === 0) return 100;
+    const takenCount = relevantSchedules.filter(s => s.status === DoseStatus.TAKEN).length;
+    return Math.round((takenCount / relevantSchedules.length) * 100);
   }, [schedules]);
   
   const ScheduleItem: React.FC<{schedule: Schedule}> = ({ schedule }) => {
@@ -74,29 +120,33 @@ const Dashboard: React.FC<DashboardProps> = ({ profile }) => {
       if (!medicine) return null;
 
       const time = new Date(schedule.scheduledTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      const statusColors = {
-          [DoseStatus.PENDING]: 'border-l-blue-500',
-          [DoseStatus.TAKEN]: 'border-l-green-500 bg-green-500/10',
-          [DoseStatus.SKIPPED]: 'border-l-yellow-500 bg-yellow-500/10',
-          [DoseStatus.OVERDUE]: 'border-l-red-500 bg-red-500/10'
+      const statusInfo = {
+          [DoseStatus.PENDING]: { text: 'Pending', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> },
+          [DoseStatus.TAKEN]: { text: 'Taken', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> },
+          [DoseStatus.SKIPPED]: { text: 'Skipped', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> },
+          [DoseStatus.OVERDUE]: { text: 'Overdue', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg> },
       };
 
       return (
-          <div className={`p-4 rounded-lg border-l-4 ${statusColors[schedule.status]} bg-gray-50 dark:bg-gray-700/50 flex flex-col sm:flex-row sm:items-center sm:justify-between`}>
-              <div>
-                  <p className="font-bold text-lg">{medicine.name}</p>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">{medicine.dose} - {medicine.instructions}</p>
-                  <p className="text-xl font-light mt-1">{time}</p>
+          <div className={`p-4 rounded-lg bg-gray-50 dark:bg-gray-800/50 flex items-center justify-between transition-all`}>
+              <div className="flex items-center">
+                  <div className="mr-4">{statusInfo[schedule.status].icon}</div>
+                  <div>
+                    <p className="font-bold text-lg text-gray-800 dark:text-gray-200">{medicine.name} <span className="text-gray-500 dark:text-gray-400 font-normal text-base">{medicine.dose}</span></p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">{medicine.instructions}</p>
+                  </div>
               </div>
-              <div className="mt-4 sm:mt-0 flex space-x-2">
-                  {schedule.status === DoseStatus.PENDING || schedule.status === DoseStatus.OVERDUE ? (
-                      <>
-                          <button onClick={() => handleUpdateSchedule(schedule.id, DoseStatus.SKIPPED)} className="px-4 py-2 rounded-md bg-yellow-500 text-white text-sm font-semibold hover:bg-yellow-600">Skip</button>
-                          <button onClick={() => handleUpdateSchedule(schedule.id, DoseStatus.TAKEN)} className="px-4 py-2 rounded-md bg-green-500 text-white text-sm font-semibold hover:bg-green-600">Take</button>
-                      </>
-                  ) : (
-                      <p className="font-semibold text-lg capitalize">{schedule.status}</p>
-                  )}
+              
+              <div className="text-right">
+                <p className="text-xl font-semibold mb-1">{time}</p>
+                {schedule.status === DoseStatus.PENDING || schedule.status === DoseStatus.OVERDUE ? (
+                    <div className="flex space-x-2">
+                        <button onClick={() => handleUpdateSchedule(schedule.id, DoseStatus.SKIPPED)} className="px-3 py-1 rounded-md bg-yellow-400/20 text-yellow-800 dark:bg-yellow-500/20 dark:text-yellow-300 text-xs font-semibold hover:bg-yellow-400/40">Skip</button>
+                        <button onClick={() => handleUpdateSchedule(schedule.id, DoseStatus.TAKEN)} className="px-3 py-1 rounded-md bg-green-500/20 text-green-800 dark:bg-green-500/20 dark:text-green-300 text-xs font-semibold hover:bg-green-500/40">Take</button>
+                    </div>
+                ) : (
+                    <p className="text-sm font-semibold capitalize">{statusInfo[schedule.status].text}</p>
+                )}
               </div>
           </div>
       );
@@ -106,29 +156,33 @@ const Dashboard: React.FC<DashboardProps> = ({ profile }) => {
     <div>
       <div className="flex justify-between items-center mb-6">
         <div>
-            <h1 className="text-3xl font-bold">Hello, {profile.name}</h1>
+            <h1 className="text-3xl font-bold">Hello, {profile.name.split(' ')[0]}</h1>
             <p className="text-gray-500 dark:text-gray-400">Here's your schedule for today.</p>
         </div>
-        <div className="text-right">
-            <p className="text-sm text-gray-500">Adherence</p>
-            <p className={`text-3xl font-bold ${adherence > 80 ? 'text-green-500' : adherence > 50 ? 'text-yellow-500' : 'text-red-500'}`}>{adherence}%</p>
+        <div className="text-center">
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Adherence</p>
+            <AdherenceRing percentage={adherence} />
         </div>
       </div>
 
-      <div className="space-y-4 mb-6">
-        <h2 className="text-xl font-semibold">Today's Doses</h2>
+      <div className="space-y-3 mb-6">
         {loading ? <p>Loading schedule...</p> : sortedSchedules.length > 0 ? (
             sortedSchedules.map(s => <ScheduleItem key={s.id} schedule={s}/>)
         ) : (
-            <p className="text-center p-8 bg-gray-50 dark:bg-gray-700/50 rounded-lg">No medications scheduled for today.</p>
+            <div className="text-center p-8 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+                <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                <h3 className="mt-2 text-lg font-medium text-gray-900 dark:text-gray-200">All Done!</h3>
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">You have no more medications scheduled for today.</p>
+            </div>
         )}
       </div>
 
       <button
         onClick={() => setIsModalOpen(true)}
-        className="w-full py-3 px-4 bg-primary-600 text-white font-bold rounded-lg hover:bg-primary-700 transition-colors"
+        className="w-full py-3 px-4 bg-primary-600 text-white font-bold rounded-lg hover:bg-primary-700 transition-colors flex items-center justify-center space-x-2"
       >
-        + Add New Medicine
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+        <span>Add New Medicine</span>
       </button>
 
       {isModalOpen && (

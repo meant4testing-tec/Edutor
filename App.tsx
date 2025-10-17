@@ -1,14 +1,13 @@
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { db } from './services/db';
 import { Profile, Schedule, DoseStatus, View, Medicine } from './types';
 import Header from './components/Header';
-import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import HistoryView from './components/HistoryView';
 import TermsModal from './components/TermsModal';
 import AlarmBanner from './components/AlarmBanner';
+import ManageProfilesModal from './components/ManageProfilesModal';
 import { DEVELOPER_NAME } from './constants';
 
 const App: React.FC = () => {
@@ -20,7 +19,7 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showTerms, setShowTerms] = useState(false);
-  const [isSidebarOpen, setSidebarOpen] = useState(false);
+  const [isManageProfilesOpen, setManageProfilesOpen] = useState(false);
   const [dueSchedules, setDueSchedules] = useState<Schedule[]>([]);
   const notifiedSchedulesRef = useRef<Set<string>>(new Set());
 
@@ -52,6 +51,8 @@ const App: React.FC = () => {
         setSelectedProfile(profileToSelect || allProfiles[0]);
       } else {
         setSelectedProfile(null);
+        // If there are no profiles, open the manager to prompt creation.
+        setManageProfilesOpen(true);
       }
     } catch (error) {
       console.error("Failed to fetch profiles:", error);
@@ -63,8 +64,10 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    fetchProfiles();
-  }, [fetchProfiles]);
+    if(termsAccepted){
+        fetchProfiles();
+    }
+  }, [fetchProfiles, termsAccepted]);
 
   useEffect(() => {
     if (selectedProfile?.id) {
@@ -76,8 +79,6 @@ const App: React.FC = () => {
 
   const handleProfileSelect = (profile: Profile | null) => {
     setSelectedProfile(profile);
-    setView(View.DASHBOARD);
-    setSidebarOpen(false);
   };
 
   const checkDueSchedules = useCallback(async () => {
@@ -106,13 +107,12 @@ const App: React.FC = () => {
           if (!notifiedSchedulesRef.current.has(s.id) && Notification.permission === 'granted') {
             new Notification('Time for your medication!', {
               body: `${s.profileName}: It's time to take ${s.medicineName}.`,
-              icon: '/vite.svg', // Optional: Add an app icon
+              icon: '/vite.svg',
             });
             notifiedSchedulesRef.current.add(s.id);
           }
         });
         
-        // Only update state if there's a change to prevent re-renders
         if (JSON.stringify(schedulesWithDetails) !== JSON.stringify(dueSchedules)) {
              setDueSchedules(schedulesWithDetails);
         }
@@ -143,6 +143,23 @@ const App: React.FC = () => {
       setDueSchedules(prev => prev.filter(s => s.id !== scheduleId));
     }
   };
+  
+  const NavButton: React.FC<{ currentView: View, targetView: View, onClick: () => void, children: React.ReactNode }> = ({ currentView, targetView, onClick, children }) => {
+    const isActive = currentView === targetView;
+    return (
+        <button
+            onClick={onClick}
+            className={`px-4 py-2 text-sm font-semibold rounded-md transition-all ${
+                isActive
+                    ? 'bg-primary-600 text-white shadow'
+                    : 'text-gray-500 hover:bg-gray-200 dark:text-gray-400 dark:hover:bg-gray-700'
+            }`}
+        >
+            {children}
+        </button>
+    )
+  };
+
 
   const renderContent = () => {
     if (error) {
@@ -150,14 +167,15 @@ const App: React.FC = () => {
     }
       
     if (loading) {
-      return <div className="text-center p-8 text-gray-500 dark:text-gray-400">Loading...</div>;
+      return <div className="text-center p-8 text-gray-500 dark:text-gray-400">Loading Profiles...</div>;
     }
 
     if (!selectedProfile) {
       return (
         <div className="flex flex-col items-center justify-center h-full p-4 text-center">
-            <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-200 mb-4">Welcome to Medicine Reminder</h2>
-            <p className="text-gray-600 dark:text-gray-400">Create a profile from the sidebar to get started.</p>
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-primary-300 dark:text-primary-600 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" /></svg>
+            <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-200 mb-2">No Profile Selected</h2>
+            <p className="text-gray-600 dark:text-gray-400">Click the profile icon in the header to add or select a profile.</p>
         </div>
       );
     }
@@ -170,51 +188,60 @@ const App: React.FC = () => {
         return <Dashboard profile={selectedProfile} />;
     }
   };
-  
-  const MemoizedHeader = React.memo(Header);
 
   return (
     <div className={`min-h-screen font-sans transition-colors duration-300 ${theme}`}>
-        <div className="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 min-h-screen flex">
-            {!termsAccepted && <TermsModal onAccept={() => setTermsAccepted(true)} />}
-            {showTerms && <TermsModal onAccept={() => setShowTerms(false)} isReopened={true} />}
-        
-            <Sidebar 
-                isOpen={isSidebarOpen}
-                onClose={() => setSidebarOpen(false)}
-                view={view}
-                setView={setView}
-                profiles={profiles}
-                selectedProfile={selectedProfile}
-                onProfileSelect={handleProfileSelect}
-                onProfilesUpdate={fetchProfiles}
-            />
+      <div className="bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 min-h-screen">
+          {!termsAccepted && <TermsModal onAccept={() => setTermsAccepted(true)} />}
+          {showTerms && <TermsModal onAccept={() => setShowTerms(false)} isReopened={true} />}
+          {isManageProfilesOpen && <ManageProfilesModal profiles={profiles} onProfilesUpdate={fetchProfiles} onClose={() => setManageProfilesOpen(false)} />}
+      
+          <Header 
+              theme={theme} 
+              onToggleTheme={() => setTheme(theme === 'light' ? 'dark' : 'light')} 
+              profiles={profiles}
+              selectedProfile={selectedProfile}
+              onProfileSelect={handleProfileSelect}
+              onManageProfiles={() => setManageProfilesOpen(true)}
+          />
 
-            <div className="flex-1 flex flex-col transition-all duration-300">
-                <MemoizedHeader 
-                    theme={theme} 
-                    onToggleTheme={() => setTheme(theme === 'light' ? 'dark' : 'light')} 
-                    onShowTerms={() => setShowTerms(true)}
-                    onToggleSidebar={() => setSidebarOpen(!isSidebarOpen)}
-                />
+          <main className="pt-20">
+              <div className="fixed top-20 left-0 right-0 z-30 p-4 space-y-2 pointer-events-none">
+                  {dueSchedules.map(schedule => (
+                      <div key={schedule.id} className="pointer-events-auto">
+                          <AlarmBanner schedule={schedule} onUpdate={handleUpdateSchedule} />
+                      </div>
+                  ))}
+              </div>
 
-                <main className="flex-grow pt-20 p-4 sm:p-6 lg:p-8 w-full">
-                     <div className="fixed top-20 left-0 right-0 z-30 p-4 space-y-2">
-                        {dueSchedules.map(schedule => (
-                            <AlarmBanner key={schedule.id} schedule={schedule} onUpdate={handleUpdateSchedule} />
-                        ))}
+              {termsAccepted && selectedProfile && (
+                <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
+                    <div className="p-2 bg-gray-200 dark:bg-gray-900 rounded-lg flex items-center justify-center space-x-2 mb-6">
+                        <NavButton currentView={view} targetView={View.DASHBOARD} onClick={() => setView(View.DASHBOARD)}>Today's Schedule</NavButton>
+                        <NavButton currentView={view} targetView={View.HISTORY} onClick={() => setView(View.HISTORY)}>Medication History</NavButton>
                     </div>
+                </div>
+              )}
+              
+              <div className="p-4 sm:p-6 lg:p-8 pt-0 max-w-4xl mx-auto">
+                  <div className="bg-white dark:bg-gray-900/50 rounded-2xl shadow-lg p-4 sm:p-6">
+                      {termsAccepted ? renderContent() : <p className="text-center py-10">Please accept the terms to use the app.</p>}
+                  </div>
+              </div>
+          </main>
 
-                    <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-4 sm:p-6 mt-8">
-                        {termsAccepted ? renderContent() : <p className="text-center">Please accept the terms to use the app.</p>}
-                    </div>
-                </main>
-
-                <footer className="text-center py-4">
-                    <p className="text-xs text-gray-500 dark:text-gray-600">Powered by {DEVELOPER_NAME}</p>
-                </footer>
-            </div>
-        </div>
+          <footer className="text-center py-4 px-4">
+              <p className="text-xs text-gray-500 dark:text-gray-600">
+                  Powered by {DEVELOPER_NAME} ・ 
+                  <button 
+                      onClick={() => setShowTerms(true)} 
+                      className="underline hover:text-primary-600 dark:hover:text-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-500 rounded"
+                  >
+                      Terms of Use
+                  </button>
+              </p>
+          </footer>
+      </div>
     </div>
   );
 };
