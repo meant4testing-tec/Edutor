@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { db } from './services/db';
@@ -54,7 +55,8 @@ const App: React.FC = () => {
       }
     } catch (error) {
       console.error("Failed to fetch profiles:", error);
-      setError("Could not load app data. This can sometimes happen in private browsing mode or if storage is disabled. Please try again.");
+      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+      setError(`Could not load app data. ${errorMessage} This can happen in private browsing mode or if your browser's storage is disabled or unsupported.`);
     } finally {
       setLoading(false);
     }

@@ -16,10 +16,17 @@ const getDB = (): Promise<IDBDatabase> => {
       return;
     }
 
+    if (!window.indexedDB) {
+      const errorMsg = "IndexedDB is not supported in this environment. The application cannot function without local storage.";
+      console.error(errorMsg);
+      reject(new Error(errorMsg));
+      return;
+    }
+
     const request = indexedDB.open(DB_NAME, DB_VERSION);
 
     request.onerror = () => {
-      console.error('IndexedDB error:', request.error);
+      console.error('IndexedDB open error:', request.error);
       reject(request.error);
     };
 
@@ -126,4 +133,3 @@ export const db = {
     }
   }
 };
-   
