@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { db } from './services/db';
@@ -18,6 +17,7 @@ const App: React.FC = () => {
   const [selectedProfile, setSelectedProfile] = useState<Profile | null>(null);
   const [view, setView] = useState<View>(View.DASHBOARD);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [showTerms, setShowTerms] = useState(false);
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [dueSchedules, setDueSchedules] = useState<Schedule[]>([]);
@@ -33,13 +33,16 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (termsAccepted && Notification.permission !== 'granted') {
-      Notification.requestPermission();
+      Notification.requestPermission().catch(err => {
+        console.error("Error requesting notification permission:", err);
+      });
     }
   }, [termsAccepted]);
 
   const fetchProfiles = useCallback(async (profileToSelectId?: string) => {
     try {
       setLoading(true);
+      setError(null);
       const allProfiles = await db.profiles.getAll();
       setProfiles(allProfiles);
       if (allProfiles.length > 0) {
@@ -51,6 +54,7 @@ const App: React.FC = () => {
       }
     } catch (error) {
       console.error("Failed to fetch profiles:", error);
+      setError("Could not load app data. This can sometimes happen in private browsing mode or if storage is disabled. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -98,7 +102,6 @@ const App: React.FC = () => {
 
         schedulesWithDetails.forEach(s => {
           if (!notifiedSchedulesRef.current.has(s.id) && Notification.permission === 'granted') {
-            // FIX: Object literal may only specify known properties, and 'vibrate' does not exist in type 'NotificationOptions'.
             new Notification('Time for your medication!', {
               body: `${s.profileName}: It's time to take ${s.medicineName}.`,
               icon: '/vite.svg', // Optional: Add an app icon
@@ -140,6 +143,10 @@ const App: React.FC = () => {
   };
 
   const renderContent = () => {
+    if (error) {
+      return <div className="text-center p-8 text-red-500 dark:text-red-400">{error}</div>;
+    }
+      
     if (loading) {
       return <div className="text-center p-8 text-gray-500 dark:text-gray-400">Loading...</div>;
     }
