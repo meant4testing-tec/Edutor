@@ -57,4 +57,5 @@ export enum FrequencyType {
 export enum View {
   DASHBOARD = 'dashboard',
   HISTORY = 'history',
+  PROFILES = 'profiles',
 }
