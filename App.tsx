@@ -1,14 +1,13 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { db } from './services/db';
-import { Profile, View, Schedule, DoseStatus } from './types';
+import { Profile, View } from './types';
 import Header from './components/Header';
 import TermsModal from './components/TermsModal';
 import Dashboard from './components/Dashboard';
 import HistoryView from './components/HistoryView';
 import ProfilesPage from './components/ProfilesPage';
 import BottomNavBar from './components/BottomNavBar';
-import AlarmBanner from './components/AlarmBanner';
 import { DEVELOPER_NAME } from './constants';
 
 const App: React.FC = () => {
@@ -20,8 +19,6 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showTerms, setShowTerms] = useState(false);
-  const [dueSchedules, setDueSchedules] = useState<Schedule[]>([]);
-  const notifiedSchedulesRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
@@ -70,70 +67,7 @@ const App: React.FC = () => {
         setView(View.DASHBOARD);
     }
   };
-
-  const checkDueSchedules = useCallback(async () => {
-    if (!termsAccepted) return;
-    try {
-      const now = new Date().toISOString();
-      const allSchedules = await db.schedules.getAll();
-      const due = allSchedules.filter(s => s.status === DoseStatus.PENDING && s.scheduledTime <= now);
-      
-      if (due.length > 0) {
-        const schedulesWithDetails = await Promise.all(
-          due.map(async (schedule) => {
-            const [profile, medicine] = await Promise.all([
-              db.profiles.get(schedule.profileId),
-              db.medicines.get(schedule.medicineId),
-            ]);
-            return {
-              ...schedule,
-              profileName: profile?.name || 'Unknown Profile',
-              medicineName: medicine?.name || 'Unknown Medicine',
-            };
-          })
-        );
-
-        schedulesWithDetails.forEach(s => {
-          if (!notifiedSchedulesRef.current.has(s.id) && Notification.permission === 'granted') {
-            new Notification('Time for your medication!', {
-              body: `${s.profileName}: It's time to take ${s.medicineName}.`,
-              icon: '/vite.svg',
-            });
-            notifiedSchedulesRef.current.add(s.id);
-          }
-        });
-        
-        if (JSON.stringify(schedulesWithDetails) !== JSON.stringify(dueSchedules)) {
-             setDueSchedules(schedulesWithDetails);
-        }
-      } else {
-          if(dueSchedules.length > 0) {
-            setDueSchedules([]);
-          }
-      }
-    } catch (error) {
-      console.error("Error checking for due schedules:", error);
-    }
-  }, [termsAccepted, dueSchedules]);
   
-  useEffect(() => {
-    const interval = setInterval(checkDueSchedules, 5000);
-    return () => clearInterval(interval);
-  }, [checkDueSchedules]);
-
-  const handleUpdateSchedule = async (scheduleId: string, status: DoseStatus.TAKEN | DoseStatus.SKIPPED) => {
-    const schedule = await db.schedules.get(scheduleId);
-    if (schedule) {
-      await db.schedules.update({
-        ...schedule,
-        status,
-        actualTakenTime: status === DoseStatus.TAKEN ? new Date().toISOString() : null,
-      });
-      notifiedSchedulesRef.current.delete(scheduleId);
-      setDueSchedules(prev => prev.filter(s => s.id !== scheduleId));
-    }
-  };
-
   const pageTitles: { [key in View]: string } = {
     [View.DASHBOARD]: "Today's Schedule",
     [View.HISTORY]: 'Medication History',
@@ -183,14 +117,6 @@ const App: React.FC = () => {
           />
 
           <main className="pt-20 pb-24">
-              <div className="fixed top-20 left-0 right-0 z-30 p-4 space-y-2 pointer-events-none">
-                  {dueSchedules.map(schedule => (
-                      <div key={schedule.id} className="pointer-events-auto">
-                          <AlarmBanner schedule={schedule} onUpdate={handleUpdateSchedule} />
-                      </div>
-                  ))}
-              </div>
-              
               <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
                   <div className="bg-white dark:bg-gray-900/50 rounded-2xl shadow-lg p-4 sm:p-6">
                       {termsAccepted ? renderContent() : <p className="text-center py-10">Please accept the terms to use the app.</p>}

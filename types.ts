@@ -59,3 +59,20 @@ export enum View {
   HISTORY = 'history',
   PROFILES = 'profiles',
 }
+
+// Fix: Add global type declaration for window.aistudio.notifications to resolve TypeScript errors.
+declare global {
+  interface Window {
+    aistudio?: {
+      notifications?: {
+        schedule: (options: {
+          id: string;
+          title: string;
+          body: string;
+          at: Date;
+        }) => Promise<void>;
+        cancel: (id: string) => Promise<void>;
+      };
+    };
+  }
+}

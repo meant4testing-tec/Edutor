@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Profile } from '../types';
 import { db } from '../services/db';
+import { cancelAllNotificationsForMedicine } from '../services/notificationManager';
 import ProfileForm from './ProfileForm';
 
 interface ProfilesPageProps {
@@ -43,6 +44,9 @@ const ProfilesPage: React.FC<ProfilesPageProps> = ({ profiles, selectedProfile, 
             try {
                 const medsToDelete = await db.medicines.getByProfileId(profileId);
                 for(const med of medsToDelete) {
+                    // Cancel all notifications for this medicine before deleting data
+                    await cancelAllNotificationsForMedicine(med.id);
+
                     const schedulesToDelete = await db.schedules.getByMedicineId(med.id);
                     for(const schedule of schedulesToDelete) {
                         await db.schedules.delete(schedule.id);

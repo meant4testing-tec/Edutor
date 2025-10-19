@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { db } from '../services/db';
 import { Profile, Medicine, Schedule, DoseStatus } from '../types';
+import { cancelNativeNotification } from '../services/notificationManager';
 import AddMedicineModal from './AddMedicineModal';
 
 interface DashboardProps {
@@ -44,7 +45,7 @@ const AdherenceRing: React.FC<{ percentage: number }> = ({ percentage }) => {
                 />
             </svg>
             <span className={`absolute text-xl font-bold ${colorClass}`}>
-                {percentage}%
+                {Math.round(percentage)}%
             </span>
         </div>
     );
@@ -58,8 +59,9 @@ const Dashboard: React.FC<DashboardProps> = ({ profile }) => {
   const [showNotificationBanner, setShowNotificationBanner] = useState(false);
 
   useEffect(() => {
-    if ('Notification' in window) {
+    if ('Notification' in window && window.aistudio?.notifications) {
       const permissionDismissed = localStorage.getItem('notificationPermissionDismissed');
+      // Show banner if native notifications are supported but permission is default
       if (Notification.permission === 'default' && !permissionDismissed) {
           setShowNotificationBanner(true);
       }
@@ -114,6 +116,8 @@ const Dashboard: React.FC<DashboardProps> = ({ profile }) => {
         status,
         actualTakenTime: status === DoseStatus.TAKEN ? new Date().toISOString() : null,
       });
+      // After updating, cancel the corresponding native notification so it doesn't fire.
+      await cancelNativeNotification(scheduleId);
       setSchedules(schedules.map(s => s.id === scheduleId ? {...s, status } : s));
     }
   };
@@ -131,10 +135,17 @@ const Dashboard: React.FC<DashboardProps> = ({ profile }) => {
   }, [schedules]);
 
   const adherence = useMemo(() => {
-    const relevantSchedules = schedules.filter(s => new Date(s.scheduledTime) < new Date() && s.status !== DoseStatus.PENDING);
-    if(relevantSchedules.length === 0) return 100;
-    const takenCount = relevantSchedules.filter(s => s.status === DoseStatus.TAKEN).length;
-    return Math.round((takenCount / relevantSchedules.length) * 100);
+    // Consider all schedules for today that were scheduled for a time before this moment.
+    const pastSchedules = schedules.filter(s => new Date(s.scheduledTime).getTime() < Date.now());
+    
+    // If there are no past schedules, adherence is 100%.
+    if (pastSchedules.length === 0) return 100;
+
+    // Count how many of the past schedules were actually taken.
+    const takenCount = pastSchedules.filter(s => s.status === DoseStatus.TAKEN).length;
+    
+    // Calculate the percentage.
+    return (takenCount / pastSchedules.length) * 100;
   }, [schedules]);
   
   const ScheduleItem: React.FC<{schedule: Schedule}> = ({ schedule }) => {

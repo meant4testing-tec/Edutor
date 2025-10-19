@@ -46,9 +46,9 @@ const HistoryView: React.FC<HistoryViewProps> = ({ profile }) => {
 
   const medicineMap = useMemo(() => new Map(medicines.map(m => [m.id, m])), [medicines]);
 
-  const handleGenerateReport = () => {
+  const handleGenerateReport = async () => {
       const relevantMedicines = medicines.filter(med => schedules.some(s => s.medicineId === med.id));
-      generatePDFReport({
+      await generatePDFReport({
           profile,
           medicines: relevantMedicines,
           schedules,
@@ -76,7 +76,7 @@ const HistoryView: React.FC<HistoryViewProps> = ({ profile }) => {
         </div>
         <button onClick={handleGenerateReport} className="px-4 py-2 bg-secondary-500 text-white font-bold rounded-lg hover:bg-secondary-600 transition-colors flex items-center space-x-2">
            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-            <span>Download PDF</span>
+            <span>Share PDF</span>
         </button>
       </div>
 

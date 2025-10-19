@@ -1,6 +1,7 @@
-import React, { useState, useRef, ChangeEvent } from 'react';
+import React, { useState, useRef, ChangeEvent, memo } from 'react';
 import { db } from '../services/db';
 import { compressImage } from '../services/imageCompressor';
+import { scheduleNativeNotificationsForMedicine } from '../services/notificationManager';
 import { Profile, Medicine, Schedule, DoseStatus, Instruction, FrequencyType } from '../types';
 
 interface AddMedicineModalProps {
@@ -8,6 +9,22 @@ interface AddMedicineModalProps {
   onClose: () => void;
   onSave: () => void;
 }
+
+const FormInput: React.FC<React.InputHTMLAttributes<HTMLInputElement> & {label: string}> = memo(({label, ...props}) => (
+  <div>
+      <label className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}</label>
+      <input {...props} className="mt-1 w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-50 dark:bg-gray-700" />
+  </div>
+));
+
+const FormSelect: React.FC<React.SelectHTMLAttributes<HTMLSelectElement> & {label: string, children: React.ReactNode}> = memo(({label, children, ...props}) => (
+  <div>
+      <label className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}</label>
+      <select {...props} className="mt-1 w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-50 dark:bg-gray-700">
+          {children}
+      </select>
+  </div>
+));
 
 const AddMedicineModal: React.FC<AddMedicineModalProps> = ({ profile, onClose, onSave }) => {
   const [name, setName] = useState('');
@@ -134,25 +151,12 @@ const AddMedicineModal: React.FC<AddMedicineModalProps> = ({ profile, onClose, o
         await db.schedules.add(schedule);
     }
     
+    // Schedule native notifications for the new medicine
+    await scheduleNativeNotificationsForMedicine(newMedicine, newSchedules);
+    
     onSave();
     onClose();
   };
-
-  const FormInput: React.FC<React.InputHTMLAttributes<HTMLInputElement> & {label: string}> = ({label, ...props}) => (
-    <div>
-        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}</label>
-        <input {...props} className="mt-1 w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-50 dark:bg-gray-700" />
-    </div>
-  );
-
-  const FormSelect: React.FC<React.SelectHTMLAttributes<HTMLSelectElement> & {label: string, children: React.ReactNode}> = ({label, children, ...props}) => (
-    <div>
-        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}</label>
-        <select {...props} className="mt-1 w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-50 dark:bg-gray-700">
-            {children}
-        </select>
-    </div>
-  );
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
