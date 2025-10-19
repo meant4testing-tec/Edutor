@@ -1,4 +1,3 @@
-// FIX: Add missing React import to fix "Cannot find namespace 'JSX'" error.
 import React from 'react';
 import { View } from '../types';
 
@@ -11,7 +10,8 @@ const NavItem: React.FC<{
   targetView: View;
   currentView: View;
   onNavigate: (view: View) => void;
-  icon: JSX.Element;
+  // Fix: Used React.ReactElement instead of JSX.Element to resolve namespace error.
+  icon: React.ReactElement;
   label: string;
 }> = ({ targetView, currentView, onNavigate, icon, label }) => {
   const isActive = currentView === targetView;

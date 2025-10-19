@@ -1,4 +1,3 @@
-
 import { Profile, Medicine, Schedule } from '../types';
 
 const DB_NAME = 'MedicineReminderDB';
@@ -73,7 +72,6 @@ const makeRequest = <T,>(storeName: string, mode: IDBTransactionMode, action: (s
   });
 };
 
-
 const createDbMethods = <T extends { id: string }>(storeName: string) => ({
   add: (item: T): Promise<IDBValidKey> => makeRequest(storeName, 'readwrite', store => store.add(item)),
   get: (id: string): Promise<T> => makeRequest(storeName, 'readonly', store => store.get(id)),
@@ -82,7 +80,6 @@ const createDbMethods = <T extends { id: string }>(storeName: string) => ({
   delete: (id: string): Promise<void> => makeRequest(storeName, 'readwrite', store => store.delete(id)),
   clear: (): Promise<void> => makeRequest(storeName, 'readwrite', store => store.clear()),
 });
-
 
 const getByIndex = <T,>(storeName: string, indexName: string, query: IDBValidKey | IDBKeyRange): Promise<T[]> => {
     return getDB().then(db => {
@@ -124,7 +121,6 @@ export const db = {
                 const request = index.getAll(range);
 
                 request.onsuccess = () => {
-                    // Filter by profileId client-side as IndexedDB doesn't support multi-index queries easily
                     resolve(request.result.filter(s => s.profileId === profileId));
                 };
                 request.onerror = () => reject(request.error);

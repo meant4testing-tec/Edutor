@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { db } from './services/db';
-import { Profile, Schedule, DoseStatus, View } from './types';
+import { Profile, View, Schedule, DoseStatus } from './types';
 import Header from './components/Header';
+import TermsModal from './components/TermsModal';
 import Dashboard from './components/Dashboard';
 import HistoryView from './components/HistoryView';
 import ProfilesPage from './components/ProfilesPage';
-import TermsModal from './components/TermsModal';
-import AlarmBanner from './components/AlarmBanner';
 import BottomNavBar from './components/BottomNavBar';
+import AlarmBanner from './components/AlarmBanner';
 import { DEVELOPER_NAME } from './constants';
 
 const App: React.FC = () => {
@@ -27,14 +27,6 @@ const App: React.FC = () => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
   }, [theme]);
 
-  useEffect(() => {
-    if (termsAccepted && Notification.permission !== 'granted') {
-      Notification.requestPermission().catch(err => {
-        console.error("Error requesting notification permission:", err);
-      });
-    }
-  }, [termsAccepted]);
-
   const fetchProfiles = useCallback(async (profileToSelectId?: string) => {
     try {
       setLoading(true);
@@ -47,7 +39,7 @@ const App: React.FC = () => {
         setSelectedProfile(profileToSelect || allProfiles[0]);
       } else {
         setSelectedProfile(null);
-        setView(View.PROFILES); // If no profiles, direct user to the profiles page.
+        setView(View.PROFILES);
       }
     } catch (error) {
       console.error("Failed to fetch profiles:", error);
@@ -74,7 +66,7 @@ const App: React.FC = () => {
 
   const handleProfileSelect = (profile: Profile | null) => {
     setSelectedProfile(profile);
-    if (profile) { // After selecting a profile, go back to the dashboard
+    if (profile) {
         setView(View.DASHBOARD);
     }
   };

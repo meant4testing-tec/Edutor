@@ -15,7 +15,6 @@ const Header: React.FC<HeaderProps> = ({ theme, onToggleTheme, title }) => {
       <div className="w-full max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           <h1 className="text-xl font-bold text-primary-600 dark:text-primary-400 truncate pr-4">{title}</h1>
-          
           <div className="flex items-center space-x-2 sm:space-x-4">
             <button
               onClick={onToggleTheme}

@@ -1,4 +1,3 @@
-
 export const compressImage = (file: File, quality = 0.7, maxWidth = 800): Promise<string> => {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -23,4 +22,3 @@ export const compressImage = (file: File, quality = 0.7, maxWidth = 800): Promis
         reader.onerror = (error) => reject(error);
     });
 };
-   

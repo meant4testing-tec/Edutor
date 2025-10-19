@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
-import { Schedule, DoseStatus, Medicine } from '../types';
+import React, { useState, useEffect } from 'react';
 import { db } from '../services/db';
+import { Schedule, DoseStatus, Medicine } from '../types';
 
 interface AlarmBannerProps {
   schedule: Schedule;
@@ -81,7 +81,7 @@ const AlarmBanner: React.FC<AlarmBannerProps> = ({ schedule, onUpdate }) => {
     };
 
     if (!medicine) {
-        return null; // Or a loading state
+        return null;
     }
 
   return (

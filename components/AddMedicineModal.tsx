@@ -1,7 +1,7 @@
 import React, { useState, useRef, ChangeEvent } from 'react';
-import { Profile, Medicine, Schedule, Instruction, FrequencyType, DoseStatus } from '../types';
 import { db } from '../services/db';
 import { compressImage } from '../services/imageCompressor';
+import { Profile, Medicine, Schedule, DoseStatus, Instruction, FrequencyType } from '../types';
 
 interface AddMedicineModalProps {
   profile: Profile;

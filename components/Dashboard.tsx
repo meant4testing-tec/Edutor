@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Profile, Medicine, Schedule, DoseStatus } from '../types';
 import { db } from '../services/db';
+import { Profile, Medicine, Schedule, DoseStatus } from '../types';
 import AddMedicineModal from './AddMedicineModal';
 
 interface DashboardProps {
@@ -50,12 +50,35 @@ const AdherenceRing: React.FC<{ percentage: number }> = ({ percentage }) => {
     );
 };
 
-
 const Dashboard: React.FC<DashboardProps> = ({ profile }) => {
   const [medicines, setMedicines] = useState<Medicine[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [showNotificationBanner, setShowNotificationBanner] = useState(false);
+
+  useEffect(() => {
+    if ('Notification' in window) {
+      const permissionDismissed = localStorage.getItem('notificationPermissionDismissed');
+      if (Notification.permission === 'default' && !permissionDismissed) {
+          setShowNotificationBanner(true);
+      }
+    }
+  }, []);
+
+  const handleEnableNotifications = async () => {
+      if ('Notification' in window && Notification.permission === 'default') {
+          const permission = await Notification.requestPermission();
+          if (permission === 'granted' || permission === 'denied') {
+              setShowNotificationBanner(false);
+          }
+      }
+  };
+
+  const handleDismissBanner = () => {
+      localStorage.setItem('notificationPermissionDismissed', 'true');
+      setShowNotificationBanner(false);
+  };
 
   const fetchData = useCallback(async () => {
     if (!profile) return;
@@ -91,7 +114,6 @@ const Dashboard: React.FC<DashboardProps> = ({ profile }) => {
         status,
         actualTakenTime: status === DoseStatus.TAKEN ? new Date().toISOString() : null,
       });
-      // Optimistic update
       setSchedules(schedules.map(s => s.id === scheduleId ? {...s, status } : s));
     }
   };
@@ -154,6 +176,22 @@ const Dashboard: React.FC<DashboardProps> = ({ profile }) => {
 
   return (
     <div>
+      {showNotificationBanner && (
+        <div className="bg-blue-100 dark:bg-blue-900/50 border-l-4 border-blue-500 text-blue-700 dark:text-blue-300 p-4 mb-6 rounded-r-lg" role="alert">
+            <div className="flex">
+                <div className="py-1"><svg className="fill-current h-6 w-6 text-blue-500 mr-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M2.93 17.07A10 10 0 1 1 17.07 2.93 10 10 0 0 1 2.93 17.07zM9 5v6h2V5H9zm0 8v2h2v-2H9z"/></svg></div>
+                <div>
+                    <p className="font-bold">Get timely reminders</p>
+                    <p className="text-sm">Enable notifications to make sure you never miss a dose.</p>
+                    <div className="mt-2">
+                        <button onClick={handleEnableNotifications} className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded text-sm">Enable</button>
+                        <button onClick={handleDismissBanner} className="text-blue-600 dark:text-blue-200 hover:underline ml-4 text-sm font-semibold">Dismiss</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+      )}
+
       <div className="flex justify-between items-center mb-6">
         <div>
             <h1 className="text-3xl font-bold">Hello, {profile.name.split(' ')[0]}</h1>
