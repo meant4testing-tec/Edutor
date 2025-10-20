@@ -69,3 +69,24 @@ export const cancelAllNotificationsForMedicine = async (medicineId: string): Pro
     console.error(`Failed to cancel all notifications for medicine ${medicineId}`, e);
   }
 };
+
+/**
+ * Cancels all FUTURE scheduled notifications for a specific medicine.
+ * Used when a medicine is edited or stopped.
+ * @param medicineId - The ID of the medicine to cancel notifications for.
+ */
+export const cancelFutureNotificationsForMedicine = async (medicineId: string): Promise<void> => {
+  if (!nativeNotifier) return;
+  try {
+    const schedules = await db.schedules.getByMedicineId(medicineId);
+    const now = new Date();
+    const futureSchedules = schedules.filter(s => new Date(s.scheduledTime).getTime() > now.getTime());
+    
+    if (futureSchedules.length > 0) {
+        const cancelPromises = futureSchedules.map(s => nativeNotifier.cancel(s.id));
+        await Promise.all(cancelPromises);
+    }
+  } catch (e) {
+    console.error(`Failed to cancel future notifications for medicine ${medicineId}`, e);
+  }
+};

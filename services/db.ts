@@ -1,4 +1,4 @@
-import { Profile, Medicine, Schedule } from '../types';
+import { Profile, Medicine, Schedule, DoseStatus } from '../types';
 
 const DB_NAME = 'MedicineReminderDB';
 const DB_VERSION = 1;
@@ -125,6 +125,42 @@ export const db = {
                 };
                 request.onerror = () => reject(request.error);
             });
+        });
+    },
+    deleteFutureSchedulesForMedicine: async (medicineId: string): Promise<void> => {
+        const db = await getDB();
+        const now = new Date();
+
+        // Step 1: Get all schedules for the specific medicine.
+        const allSchedulesForMedicine = await getByIndex<Schedule>(SCHEDULES_STORE, 'medicineId', medicineId);
+        
+        // Step 2: Filter this list in code to find schedules that are in the future and are still active.
+        const schedulesToDelete = allSchedulesForMedicine.filter(s => {
+            const scheduledTime = new Date(s.scheduledTime);
+            return scheduledTime > now && (s.status === DoseStatus.PENDING || s.status === DoseStatus.OVERDUE);
+        });
+
+        if (schedulesToDelete.length === 0) {
+            return Promise.resolve(); // Nothing to delete.
+        }
+
+        // Step 3: Open a new transaction and delete the identified schedules by their primary key.
+        return new Promise<void>((resolve, reject) => {
+            const transaction = db.transaction(SCHEDULES_STORE, 'readwrite');
+            const store = transaction.objectStore(SCHEDULES_STORE);
+
+            schedulesToDelete.forEach(schedule => {
+                store.delete(schedule.id);
+            });
+
+            transaction.oncomplete = () => {
+                resolve();
+            };
+
+            transaction.onerror = () => {
+                console.error('Transaction error on deleting future schedules:', transaction.error);
+                reject(transaction.error);
+            };
         });
     }
   }

@@ -134,23 +134,23 @@ export const generatePDFReport = async (data: ReportData): Promise<void> => {
   }
   
   const fileName = `${profile.name}_Medication_Report.pdf`;
-  try {
-    const pdfDataUri = doc.output('datauristring');
-    const response = await fetch(pdfDataUri);
-    const blob = await response.blob();
-    const file = new File([blob], fileName, { type: 'application/pdf' });
 
-    if (navigator.share && navigator.canShare({ files: [file] })) {
-        await navigator.share({
-            title: 'Medicine History Report',
-            text: `Here is the medication report for ${profile.name}.`,
-            files: [file],
-        });
-    } else {
-        doc.save(fileName);
+  if (window.aistudio?.share) {
+    try {
+      const pdfDataUri = doc.output('datauristring');
+      const base64Data = pdfDataUri.substring(pdfDataUri.indexOf(',') + 1);
+      
+      await window.aistudio.share({
+        data: base64Data,
+        filename: fileName,
+        mimeType: 'application/pdf',
+      });
+    } catch (error) {
+      console.error('Native sharing failed:', error);
+      alert('Could not share the report. Please try again.');
     }
-  } catch (error) {
-    console.error('Sharing failed, falling back to download:', error);
+  } else {
+    console.warn('Native share not available, falling back to download.');
     doc.save(fileName);
   }
 };

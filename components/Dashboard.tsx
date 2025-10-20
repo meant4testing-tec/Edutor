@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { db } from '../services/db';
 import { Profile, Medicine, Schedule, DoseStatus } from '../types';
 import { cancelNativeNotification } from '../services/notificationManager';
-import AddMedicineModal from './AddMedicineModal';
+import MedicineFormModal from './AddMedicineModal';
 
 interface DashboardProps {
   profile: Profile;
@@ -54,9 +54,11 @@ const AdherenceRing: React.FC<{ percentage: number }> = ({ percentage }) => {
 const Dashboard: React.FC<DashboardProps> = ({ profile }) => {
   const [medicines, setMedicines] = useState<Medicine[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [medicineToEdit, setMedicineToEdit] = useState<Medicine | null>(null);
   const [loading, setLoading] = useState(true);
   const [showNotificationBanner, setShowNotificationBanner] = useState(false);
+  const [copiedScheduleId, setCopiedScheduleId] = useState<string | null>(null);
 
   useEffect(() => {
     if ('Notification' in window && window.aistudio?.notifications) {
@@ -86,7 +88,8 @@ const Dashboard: React.FC<DashboardProps> = ({ profile }) => {
     if (!profile) return;
     setLoading(true);
     try {
-      const meds = await db.medicines.getByProfileId(profile.id);
+      // Fetch all medicines (including stopped) to ensure history can be displayed correctly.
+      const allMeds = await db.medicines.getByProfileId(profile.id);
       
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -95,7 +98,7 @@ const Dashboard: React.FC<DashboardProps> = ({ profile }) => {
       
       const todaySchedules = await db.schedules.getByDateRange(profile.id, today.toISOString(), tomorrow.toISOString());
       
-      setMedicines(meds);
+      setMedicines(allMeds);
       setSchedules(todaySchedules);
     } catch(e) {
         console.error("Failed to fetch dashboard data:", e);
@@ -107,6 +110,41 @@ const Dashboard: React.FC<DashboardProps> = ({ profile }) => {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+  
+  const medicineMap = useMemo(() => new Map(medicines.map(m => [m.id, m])), [medicines]);
+
+  const handleCopyToClipboard = (schedule: Schedule) => {
+    const medicine = medicineMap.get(schedule.medicineId);
+    if (!medicine || !profile) return;
+    
+    const time = new Date(schedule.scheduledTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    
+    let message = `Reminder for ${profile.name}:\n`;
+    message += `- Medicine: ${medicine.name}\n`;
+    message += `- Dose: ${medicine.dose}\n`;
+    message += `- Time: ${time}\n`;
+    message += `- Instruction: ${medicine.instructions}\n`;
+    if (medicine.customInstructions) {
+        message += `- Usage: ${medicine.customInstructions}`;
+    }
+
+    navigator.clipboard.writeText(message).then(() => {
+        setCopiedScheduleId(schedule.id);
+        setTimeout(() => setCopiedScheduleId(null), 2000);
+    });
+  };
+
+  const handleOpenEditModal = async (medicineId: string) => {
+    const medicine = await db.medicines.get(medicineId);
+    if (medicine) {
+        setMedicineToEdit(medicine);
+    }
+  };
+
+  const handleCloseModal = () => {
+      setIsAddModalOpen(false);
+      setMedicineToEdit(null);
+  };
   
   const handleUpdateSchedule = async (scheduleId: string, status: DoseStatus.TAKEN | DoseStatus.SKIPPED) => {
     const schedule = schedules.find(s => s.id === scheduleId);
@@ -122,8 +160,6 @@ const Dashboard: React.FC<DashboardProps> = ({ profile }) => {
     }
   };
 
-  const medicineMap = useMemo(() => new Map(medicines.map(m => [m.id, m])), [medicines]);
-
   const sortedSchedules = useMemo(() => {
     const now = new Date();
     return schedules
@@ -135,16 +171,12 @@ const Dashboard: React.FC<DashboardProps> = ({ profile }) => {
   }, [schedules]);
 
   const adherence = useMemo(() => {
-    // Consider all schedules for today that were scheduled for a time before this moment.
-    const pastSchedules = schedules.filter(s => new Date(s.scheduledTime).getTime() < Date.now());
+    const pastSchedules = schedules.filter(s => new Date(s.scheduledTime).getTime() < Date.now() && (s.status === DoseStatus.TAKEN || s.status === DoseStatus.SKIPPED || s.status === DoseStatus.OVERDUE));
     
-    // If there are no past schedules, adherence is 100%.
     if (pastSchedules.length === 0) return 100;
 
-    // Count how many of the past schedules were actually taken.
     const takenCount = pastSchedules.filter(s => s.status === DoseStatus.TAKEN).length;
     
-    // Calculate the percentage.
     return (takenCount / pastSchedules.length) * 100;
   }, [schedules]);
   
@@ -159,29 +191,45 @@ const Dashboard: React.FC<DashboardProps> = ({ profile }) => {
           [DoseStatus.SKIPPED]: { text: 'Skipped', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> },
           [DoseStatus.OVERDUE]: { text: 'Overdue', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg> },
       };
+      
+      const isCopied = copiedScheduleId === schedule.id;
 
       return (
-          <div className={`p-4 rounded-lg bg-gray-50 dark:bg-gray-800/50 flex items-center justify-between transition-all`}>
-              <div className="flex items-center">
-                  <div className="mr-4">{statusInfo[schedule.status].icon}</div>
-                  <div>
-                    <p className="font-bold text-lg text-gray-800 dark:text-gray-200">{medicine.name} <span className="text-gray-500 dark:text-gray-400 font-normal text-base">{medicine.dose}</span></p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">{medicine.instructions}</p>
-                  </div>
-              </div>
-              
-              <div className="text-right">
-                <p className="text-xl font-semibold mb-1">{time}</p>
-                {schedule.status === DoseStatus.PENDING || schedule.status === DoseStatus.OVERDUE ? (
-                    <div className="flex space-x-2">
-                        <button onClick={() => handleUpdateSchedule(schedule.id, DoseStatus.SKIPPED)} className="px-3 py-1 rounded-md bg-yellow-400/20 text-yellow-800 dark:bg-yellow-500/20 dark:text-yellow-300 text-xs font-semibold hover:bg-yellow-400/40">Skip</button>
-                        <button onClick={() => handleUpdateSchedule(schedule.id, DoseStatus.TAKEN)} className="px-3 py-1 rounded-md bg-green-500/20 text-green-800 dark:bg-green-500/20 dark:text-green-300 text-xs font-semibold hover:bg-green-500/40">Take</button>
+          <button onClick={() => handleOpenEditModal(schedule.medicineId)} className="w-full text-left focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 rounded-lg" disabled={medicine.status === 'stopped'}>
+            <div className={`p-4 rounded-lg bg-gray-50 dark:bg-gray-800/50 flex items-center justify-between transition-all ${medicine.status === 'stopped' ? 'opacity-60' : ''}`}>
+                <div className="flex items-center">
+                    <div className="mr-4">{statusInfo[schedule.status].icon}</div>
+                    <div>
+                      <p className="font-bold text-lg text-gray-800 dark:text-gray-200">{medicine.name} <span className="text-gray-500 dark:text-gray-400 font-normal text-base">{medicine.dose}</span></p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">{medicine.instructions}</p>
                     </div>
-                ) : (
-                    <p className="text-sm font-semibold capitalize">{statusInfo[schedule.status].text}</p>
-                )}
-              </div>
-          </div>
+                </div>
+                
+                <div className="flex items-center space-x-2">
+                  <div className="text-right">
+                    <p className="text-xl font-semibold mb-1">{time}</p>
+                    {schedule.status === DoseStatus.PENDING || schedule.status === DoseStatus.OVERDUE ? (
+                        <div className="flex space-x-2">
+                            <button onClick={(e) => { e.stopPropagation(); handleUpdateSchedule(schedule.id, DoseStatus.SKIPPED)}} className="px-3 py-1 rounded-md bg-yellow-400/20 text-yellow-800 dark:bg-yellow-500/20 dark:text-yellow-300 text-xs font-semibold hover:bg-yellow-400/40">Skip</button>
+                            <button onClick={(e) => { e.stopPropagation(); handleUpdateSchedule(schedule.id, DoseStatus.TAKEN)}} className="px-3 py-1 rounded-md bg-green-500/20 text-green-800 dark:bg-green-500/20 dark:text-green-300 text-xs font-semibold hover:bg-green-500/40">Take</button>
+                        </div>
+                    ) : (
+                        <p className="text-sm font-semibold capitalize">{statusInfo[schedule.status].text}</p>
+                    )}
+                  </div>
+                  <button 
+                      onClick={(e) => { e.stopPropagation(); handleCopyToClipboard(schedule); }} 
+                      className={`p-2 rounded-full transition-colors ${isCopied ? 'text-green-500' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
+                      aria-label="Copy reminder details"
+                  >
+                      {isCopied ? 
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg> :
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                      }
+                  </button>
+                </div>
+            </div>
+          </button>
       );
   };
 
@@ -227,18 +275,22 @@ const Dashboard: React.FC<DashboardProps> = ({ profile }) => {
       </div>
 
       <button
-        onClick={() => setIsModalOpen(true)}
+        onClick={() => setIsAddModalOpen(true)}
         className="w-full py-3 px-4 bg-primary-600 text-white font-bold rounded-lg hover:bg-primary-700 transition-colors flex items-center justify-center space-x-2"
       >
         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
         <span>Add New Medicine</span>
       </button>
 
-      {isModalOpen && (
-        <AddMedicineModal
+      {(isAddModalOpen || medicineToEdit) && (
+        <MedicineFormModal
           profile={profile}
-          onClose={() => setIsModalOpen(false)}
-          onSave={fetchData}
+          existingMedicine={medicineToEdit}
+          onClose={handleCloseModal}
+          onSave={() => {
+            handleCloseModal();
+            fetchData();
+          }}
         />
       )}
     </div>

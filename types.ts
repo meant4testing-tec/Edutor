@@ -17,9 +17,12 @@ export interface Medicine {
   customInstructions?: string;
   frequencyType: FrequencyType;
   frequencyValue: number; // e.g., 3 for "3 times a day", 8 for "every 8 hours"
+  frequencyFixedTimes?: string[]; // e.g., ["08:00", "14:30", "21:00"]
   prescriptionImage?: string; // base64 encoded image
   medicineImage?: string; // base64 encoded image
   startDate: string; // ISO string
+  endDate?: string; // ISO string, marks when a medicine was stopped
+  status: 'active' | 'stopped';
   doctorName?: string;
 }
 
@@ -52,6 +55,7 @@ export enum Instruction {
 export enum FrequencyType {
   TIMES_A_DAY = 'Times a day',
   EVERY_X_HOURS = 'Every X hours',
+  FIXED_TIMES = 'Fixed Times',
 }
 
 export enum View {
@@ -60,19 +64,28 @@ export enum View {
   PROFILES = 'profiles',
 }
 
-// Fix: Add global type declaration for window.aistudio.notifications to resolve TypeScript errors.
+// Fix: To resolve declaration errors and property access issues, the AIStudio interface
+// is now defined within the `declare global` block. This ensures a single, globally-scoped
+// definition for `window.aistudio` that is consistently applied across all files.
 declare global {
-  interface Window {
-    aistudio?: {
-      notifications?: {
-        schedule: (options: {
-          id: string;
-          title: string;
-          body: string;
-          at: Date;
-        }) => Promise<void>;
-        cancel: (id: string) => Promise<void>;
-      };
+  interface AIStudio {
+    notifications?: {
+      schedule: (options: {
+        id: string;
+        title: string;
+        body: string;
+        at: Date;
+      }) => Promise<void>;
+      cancel: (id: string) => Promise<void>;
     };
+    share?: (options: {
+      data: string; // base64 encoded data string (without the data: prefix)
+      filename: string;
+      mimeType: string;
+    }) => Promise<void>;
+  }
+
+  interface Window {
+    aistudio?: AIStudio;
   }
 }
