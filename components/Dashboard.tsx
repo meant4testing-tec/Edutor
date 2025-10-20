@@ -115,16 +115,23 @@ const Dashboard: React.FC<DashboardProps> = ({ profile }) => {
 
   const handleCopyToClipboard = (schedule: Schedule) => {
     const medicine = medicineMap.get(schedule.medicineId);
-    if (!medicine || !profile) return;
+    if (!profile) return;
+
+    const displayName = schedule.medicineName || medicine?.name;
+    const displayDose = schedule.dose || medicine?.dose;
     
+    if (!displayName || !displayDose) return;
+
     const time = new Date(schedule.scheduledTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     
     let message = `Reminder for ${profile.name}:\n`;
-    message += `- Medicine: ${medicine.name}\n`;
-    message += `- Dose: ${medicine.dose}\n`;
+    message += `- Medicine: ${displayName}\n`;
+    message += `- Dose: ${displayDose}\n`;
     message += `- Time: ${time}\n`;
-    message += `- Instruction: ${medicine.instructions}\n`;
-    if (medicine.customInstructions) {
+    if (medicine?.instructions) {
+        message += `- Instruction: ${medicine.instructions}\n`;
+    }
+    if (medicine?.customInstructions) {
         message += `- Usage: ${medicine.customInstructions}`;
     }
 
@@ -182,7 +189,15 @@ const Dashboard: React.FC<DashboardProps> = ({ profile }) => {
   
   const ScheduleItem: React.FC<{schedule: Schedule}> = ({ schedule }) => {
       const medicine = medicineMap.get(schedule.medicineId);
-      if (!medicine) return null;
+      
+      // Fallback for older schedule data that doesn't have the new fields
+      const displayName = schedule.medicineName || medicine?.name;
+      const displayDose = schedule.dose || medicine?.dose;
+      
+      // Instructions are not snapshotted, so we still get them from the live medicine object
+      const displayInstructions = medicine?.instructions || '';
+
+      if (!displayName) return null; // Don't render if we can't determine a medicine name
 
       const time = new Date(schedule.scheduledTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       const statusInfo = {
@@ -195,13 +210,13 @@ const Dashboard: React.FC<DashboardProps> = ({ profile }) => {
       const isCopied = copiedScheduleId === schedule.id;
 
       return (
-          <button onClick={() => handleOpenEditModal(schedule.medicineId)} className="w-full text-left focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 rounded-lg" disabled={medicine.status === 'stopped'}>
-            <div className={`p-4 rounded-lg bg-gray-50 dark:bg-gray-800/50 flex items-center justify-between transition-all ${medicine.status === 'stopped' ? 'opacity-60' : ''}`}>
+          <button onClick={() => handleOpenEditModal(schedule.medicineId)} className="w-full text-left focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 rounded-lg" disabled={medicine?.status === 'stopped'}>
+            <div className={`p-4 rounded-lg bg-gray-50 dark:bg-gray-800/50 flex items-center justify-between transition-all ${medicine?.status === 'stopped' ? 'opacity-60' : ''}`}>
                 <div className="flex items-center">
                     <div className="mr-4">{statusInfo[schedule.status].icon}</div>
                     <div>
-                      <p className="font-bold text-lg text-gray-800 dark:text-gray-200">{medicine.name} <span className="text-gray-500 dark:text-gray-400 font-normal text-base">{medicine.dose}</span></p>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">{medicine.instructions}</p>
+                      <p className="font-bold text-lg text-gray-800 dark:text-gray-200">{displayName} <span className="text-gray-500 dark:text-gray-400 font-normal text-base">{displayDose}</span></p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">{displayInstructions}</p>
                     </div>
                 </div>
                 

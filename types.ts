@@ -34,7 +34,9 @@ export interface Schedule {
   status: DoseStatus;
   actualTakenTime: string | null; // ISO string
   profileName?: string;
-  medicineName?: string;
+  medicineName: string; // Was optional, now required for new schedules
+  dose: string; // Added to snapshot dose
+  notificationShown?: boolean; // Added to track if the background notification has been sent
 }
 
 export enum DoseStatus {

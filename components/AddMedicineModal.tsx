@@ -188,7 +188,10 @@ const MedicineFormModal: React.FC<MedicineFormModalProps> = ({ profile, onClose,
                 profileId: medicine.profileId,
                 scheduledTime: scheduleTime.toISOString(),
                 status: DoseStatus.PENDING,
-                actualTakenTime: null
+                actualTakenTime: null,
+                medicineName: medicine.name,
+                dose: medicine.dose,
+                notificationShown: false,
             });
         }
     });
@@ -229,14 +232,11 @@ const MedicineFormModal: React.FC<MedicineFormModalProps> = ({ profile, onClose,
             await db.medicines.update(updatedMedicine);
 
             if (hasMajorChange) {
-                await cancelFutureNotificationsForMedicine(existingMedicine.id);
                 await db.schedules.deleteFutureSchedulesForMedicine(existingMedicine.id);
-
                 const newSchedules = generateSchedules(updatedMedicine, true); // true for 'fromNowOnly'
                 for (const schedule of newSchedules) {
                     await db.schedules.add(schedule);
                 }
-                await scheduleNativeNotificationsForMedicine(updatedMedicine, newSchedules);
             }
         } else {
             // Adding a new medicine
@@ -258,7 +258,6 @@ const MedicineFormModal: React.FC<MedicineFormModalProps> = ({ profile, onClose,
             for (const schedule of newSchedules) {
                 await db.schedules.add(schedule);
             }
-            await scheduleNativeNotificationsForMedicine(newMedicine, newSchedules);
         }
 
         onSave();
@@ -289,7 +288,6 @@ const MedicineFormModal: React.FC<MedicineFormModalProps> = ({ profile, onClose,
             endDate: new Date().toISOString(),
         };
         await db.medicines.update(stoppedMedicine);
-        await cancelFutureNotificationsForMedicine(existingMedicine.id);
         await db.schedules.deleteFutureSchedulesForMedicine(existingMedicine.id);
         
         onSave();

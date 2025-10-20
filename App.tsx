@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { db } from './services/db';
-import { Profile, View } from './types';
+import { Profile, View, Schedule, DoseStatus } from './types';
 import Header from './components/Header';
 import TermsModal from './components/TermsModal';
 import Dashboard from './components/Dashboard';
@@ -9,6 +9,8 @@ import HistoryView from './components/HistoryView';
 import ProfilesPage from './components/ProfilesPage';
 import BottomNavBar from './components/BottomNavBar';
 import { DEVELOPER_NAME } from './constants';
+import AlarmBanner from './components/AlarmBanner';
+import { cancelNativeNotification } from './services/notificationManager';
 
 const App: React.FC = () => {
   const [theme, setTheme] = useLocalStorage('theme', 'light');
@@ -19,6 +21,8 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showTerms, setShowTerms] = useState(false);
+  const [alarmingSchedule, setAlarmingSchedule] = useState<Schedule | null>(null);
+
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
@@ -59,7 +63,66 @@ const App: React.FC = () => {
     } else if (profiles.length === 0) {
         localStorage.removeItem('selectedProfileId');
     }
+    
+    // Communicate the selected profile to the service worker for background notifications.
+    const setProfileInSW = () => {
+      if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({
+          type: 'SET_PROFILE',
+          profileId: selectedProfile?.id || null
+        });
+      }
+    };
+
+    if (navigator.serviceWorker?.controller) {
+       setProfileInSW();
+    } else {
+       navigator.serviceWorker?.ready.then(setProfileInSW);
+    }
+
   }, [selectedProfile, profiles]);
+  
+  const checkforAlarms = useCallback(async () => {
+    if (!selectedProfile || alarmingSchedule || !termsAccepted) return;
+
+    const now = new Date();
+    // Check for any PENDING schedules that are now in the past.
+    // We check up to 5 minutes in the past to catch any missed intervals.
+    const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000); 
+
+    try {
+      const potentialAlarms = await db.schedules.getByDateRange(selectedProfile.id, fiveMinutesAgo.toISOString(), now.toISOString());
+      
+      const dueSchedule = potentialAlarms.find(s => s.status === DoseStatus.PENDING);
+
+      if (dueSchedule) {
+          const profile = await db.profiles.get(dueSchedule.profileId);
+          setAlarmingSchedule({ ...dueSchedule, profileName: profile?.name });
+      }
+    } catch(e) {
+        console.error("Error checking for alarms:", e);
+    }
+  }, [selectedProfile, alarmingSchedule, termsAccepted]);
+
+  useEffect(() => {
+    const intervalId = setInterval(checkforAlarms, 15000); // Check every 15 seconds
+    return () => clearInterval(intervalId);
+  }, [checkforAlarms]);
+
+  const handleUpdateAlarmingSchedule = async (scheduleId: string, status: DoseStatus.TAKEN | DoseStatus.SKIPPED) => {
+      const scheduleToUpdate = alarmingSchedule;
+      if (scheduleToUpdate && scheduleToUpdate.id === scheduleId) {
+          await db.schedules.update({
+              ...scheduleToUpdate,
+              status,
+              actualTakenTime: status === DoseStatus.TAKEN ? new Date().toISOString() : null,
+          });
+          // No need to cancel native notification here, as the SW won't re-notify for a non-pending status.
+          setAlarmingSchedule(null);
+          // The dashboard will refresh its data automatically via its own useEffect when it becomes visible.
+      }
+  };
+
 
   const handleProfileSelect = (profile: Profile | null) => {
     setSelectedProfile(profile);
@@ -115,6 +178,12 @@ const App: React.FC = () => {
               onToggleTheme={() => setTheme(theme === 'light' ? 'dark' : 'light')} 
               title={selectedProfile ? `${pageTitles[view]} for ${selectedProfile.name.split(' ')[0]}` : pageTitles[view]}
           />
+
+          {alarmingSchedule && (
+              <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 w-full px-4" style={{maxWidth: 'calc(100% - 2rem)'}}>
+                  <AlarmBanner schedule={alarmingSchedule} onUpdate={handleUpdateAlarmingSchedule} />
+              </div>
+          )}
 
           <main className="pt-20 pb-24">
               <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">

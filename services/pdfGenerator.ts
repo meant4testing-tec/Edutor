@@ -51,78 +51,32 @@ export const generatePDFReport = async (data: ReportData): Promise<void> => {
   doc.setLineWidth(0.5);
   doc.line(14, 65, 196, 65);
 
-  let yPos = 75;
+  const medicineMap = new Map(medicines.map(m => [m.id, m]));
+  
+  const tableBody = schedules
+      .sort((a,b) => new Date(a.scheduledTime).getTime() - new Date(b.scheduledTime).getTime())
+      .map(s => {
+          const scheduled = new Date(s.scheduledTime);
+          const medicine = medicineMap.get(s.medicineId);
+          // Use snapshotted data with fallback for older records
+          const displayName = s.medicineName || medicine?.name || 'N/A';
+          const displayDose = s.dose || medicine?.dose || 'N/A';
+          return [
+              scheduled.toLocaleString(),
+              displayName,
+              displayDose,
+              s.status.charAt(0).toUpperCase() + s.status.slice(1)
+          ];
+      });
 
-  for (const medicine of medicines) {
-    const medicineSchedules = schedules.filter(s => s.medicineId === medicine.id);
-    if (medicineSchedules.length === 0) continue;
+  (doc as any).autoTable({
+    startY: 75,
+    head: [['Scheduled Time', 'Medicine', 'Dose', 'Status']],
+    body: tableBody,
+    theme: 'grid',
+    headStyles: { fillColor: [20, 184, 166] },
+  });
 
-    if (yPos > 240) {
-      doc.addPage();
-      yPos = 20;
-    }
-    
-    doc.setFontSize(12);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(13, 148, 136);
-    doc.text(`${medicine.name} (${medicine.dose})`, 14, yPos);
-    yPos += 7;
-
-    if (medicine.doctorName) {
-        doc.setFontSize(10);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(100, 116, 139);
-        doc.text(`Prescribed by: ${medicine.doctorName}`, 14, yPos);
-        yPos += 5;
-    }
-
-    const hasPrescriptionImg = !!medicine.prescriptionImage;
-    const hasMedicineImg = !!medicine.medicineImage;
-    if (hasPrescriptionImg || hasMedicineImg) {
-       if (yPos > 200) { 
-            doc.addPage();
-            yPos = 20;
-       }
-       let currentX = 14;
-       if(hasMedicineImg) {
-           doc.setFontSize(9);
-           doc.text('Medicine Image:', currentX, yPos);
-           addImageToDoc(doc, medicine.medicineImage!, currentX, yPos + 2, 40, 40);
-           currentX += 50;
-       }
-       if(hasPrescriptionImg) {
-           doc.setFontSize(9);
-           doc.text('Prescription:', currentX, yPos);
-           addImageToDoc(doc, medicine.prescriptionImage!, currentX, yPos + 2, 60, 40);
-       }
-       yPos += 48;
-    }
-    
-    const tableBody = medicineSchedules
-        .sort((a,b) => new Date(a.scheduledTime).getTime() - new Date(b.scheduledTime).getTime())
-        .map(s => {
-            const scheduled = new Date(s.scheduledTime);
-            const actual = s.actualTakenTime ? new Date(s.actualTakenTime) : null;
-            return [
-                scheduled.toLocaleString(),
-                actual ? actual.toLocaleString() : '-',
-                s.status.charAt(0).toUpperCase() + s.status.slice(1)
-            ];
-        });
-
-    (doc as any).autoTable({
-      startY: yPos,
-      head: [['Scheduled Time', 'Actual Time Taken', 'Status']],
-      body: tableBody,
-      theme: 'grid',
-      headStyles: { fillColor: [20, 184, 166] },
-      didDrawPage: (data: any) => {
-        yPos = data.cursor.y;
-      }
-    });
-
-    yPos = (doc as any).previousAutoTable.finalY + 10;
-  }
 
   const pageCount = doc.internal.getNumberOfPages();
   for (let i = 1; i <= pageCount; i++) {
@@ -135,22 +89,6 @@ export const generatePDFReport = async (data: ReportData): Promise<void> => {
   
   const fileName = `${profile.name}_Medication_Report.pdf`;
 
-  if (window.aistudio?.share) {
-    try {
-      const pdfDataUri = doc.output('datauristring');
-      const base64Data = pdfDataUri.substring(pdfDataUri.indexOf(',') + 1);
-      
-      await window.aistudio.share({
-        data: base64Data,
-        filename: fileName,
-        mimeType: 'application/pdf',
-      });
-    } catch (error) {
-      console.error('Native sharing failed:', error);
-      alert('Could not share the report. Please try again.');
-    }
-  } else {
-    console.warn('Native share not available, falling back to download.');
-    doc.save(fileName);
-  }
+  // Use doc.save() for direct download, which is more reliable on mobile.
+  doc.save(fileName);
 };
