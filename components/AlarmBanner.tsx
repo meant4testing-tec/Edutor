@@ -9,7 +9,7 @@ interface AlarmBannerProps {
 
 const AlarmBanner: React.FC<AlarmBannerProps> = ({ schedule, onUpdate }) => {
     const [medicine, setMedicine] = useState<Medicine | null>(null);
-    const [copied, setCopied] = useState(false);
+    const [shared, setShared] = useState(false);
 
     useEffect(() => {
         let audioContext: AudioContext | null = null;
@@ -60,24 +60,37 @@ const AlarmBanner: React.FC<AlarmBannerProps> = ({ schedule, onUpdate }) => {
         }
     }, [schedule.id, schedule.medicineId]);
     
-    const handleCopyToClipboard = () => {
+    const handleShareReminder = async () => {
         if (!medicine) return;
         
         const time = new Date(schedule.scheduledTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         
-        let message = `Reminder for ${schedule.profileName}:\n`;
-        message += `- Medicine: ${medicine.name}\n`;
-        message += `- Dose: ${medicine.dose}\n`;
-        message += `- Time: ${time}\n`;
-        message += `- Instruction: ${medicine.instructions}\n`;
+        let text = `Reminder for ${schedule.profileName}:\n`;
+        text += `- Medicine: ${medicine.name}\n`;
+        text += `- Dose: ${medicine.dose}\n`;
+        text += `- Time: ${time}\n`;
+        text += `- Instruction: ${medicine.instructions}`;
         if (medicine.customInstructions) {
-            message += `- Usage: ${medicine.customInstructions}`;
+            text += `\n- Usage: ${medicine.customInstructions}`;
         }
 
-        navigator.clipboard.writeText(message).then(() => {
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-        });
+        const shareData = {
+            title: `Medicine Reminder for ${schedule.profileName}`,
+            text,
+        };
+
+        try {
+            if (navigator.share) {
+                await navigator.share(shareData);
+            } else {
+                await navigator.clipboard.writeText(shareData.text);
+            }
+            setShared(true);
+        } catch (error) {
+            console.error('Error sharing:', error);
+        } finally {
+            setTimeout(() => setShared(false), 2000);
+        }
     };
 
     if (!medicine) {
@@ -97,8 +110,8 @@ const AlarmBanner: React.FC<AlarmBannerProps> = ({ schedule, onUpdate }) => {
             </div>
         </div>
         <div className="mt-2 text-right">
-             <button onClick={handleCopyToClipboard} className="px-3 py-1 bg-white/20 hover:bg-white/40 rounded-md text-sm">
-                {copied ? 'Copied!' : 'Copy Reminder'}
+             <button onClick={handleShareReminder} className="px-3 py-1 bg-white/20 hover:bg-white/40 rounded-md text-sm">
+                {shared ? 'Shared!' : 'Share Reminder'}
              </button>
         </div>
     </div>

@@ -89,6 +89,23 @@ export const generatePDFReport = async (data: ReportData): Promise<void> => {
   
   const fileName = `${profile.name}_Medication_Report.pdf`;
 
-  // Use doc.save() for direct download, which is more reliable on mobile.
-  doc.save(fileName);
+  // For a native app environment, we must rely on the injected 'share' functionality.
+  // Web-based fallbacks like creating download links are unreliable in WebViews.
+  if (window.aistudio?.share) {
+    try {
+      const pdfBase64 = doc.output('datauristring').split(',')[1];
+      await window.aistudio.share({
+          data: pdfBase64,
+          filename: fileName,
+          mimeType: 'application/pdf',
+      });
+    } catch (error) {
+      console.error("Native PDF sharing failed:", error);
+      alert("Could not share the PDF report. An unexpected error occurred.");
+    }
+  } else {
+    // If the native share API is not available, inform the user.
+    console.warn("`window.aistudio.share` is not available. PDF download is not supported in this environment.");
+    alert("Saving PDF reports is not supported on this device. This feature requires the native app environment.");
+  }
 };

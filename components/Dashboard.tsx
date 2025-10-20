@@ -58,7 +58,7 @@ const Dashboard: React.FC<DashboardProps> = ({ profile }) => {
   const [medicineToEdit, setMedicineToEdit] = useState<Medicine | null>(null);
   const [loading, setLoading] = useState(true);
   const [showNotificationBanner, setShowNotificationBanner] = useState(false);
-  const [copiedScheduleId, setCopiedScheduleId] = useState<string | null>(null);
+  const [sharedScheduleId, setSharedScheduleId] = useState<string | null>(null);
 
   useEffect(() => {
     if ('Notification' in window && window.aistudio?.notifications) {
@@ -113,32 +113,39 @@ const Dashboard: React.FC<DashboardProps> = ({ profile }) => {
   
   const medicineMap = useMemo(() => new Map(medicines.map(m => [m.id, m])), [medicines]);
 
-  const handleCopyToClipboard = (schedule: Schedule) => {
+  const handleShareReminder = async (schedule: Schedule) => {
     const medicine = medicineMap.get(schedule.medicineId);
-    if (!profile) return;
+    if (!profile || !medicine) return;
 
-    const displayName = schedule.medicineName || medicine?.name;
-    const displayDose = schedule.dose || medicine?.dose;
-    
-    if (!displayName || !displayDose) return;
+    const displayName = schedule.medicineName || medicine.name;
+    const displayDose = schedule.dose || medicine.dose;
 
     const time = new Date(schedule.scheduledTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     
-    let message = `Reminder for ${profile.name}:\n`;
-    message += `- Medicine: ${displayName}\n`;
-    message += `- Dose: ${displayDose}\n`;
-    message += `- Time: ${time}\n`;
-    if (medicine?.instructions) {
-        message += `- Instruction: ${medicine.instructions}\n`;
-    }
-    if (medicine?.customInstructions) {
-        message += `- Usage: ${medicine.customInstructions}`;
-    }
+    let text = `Reminder for ${profile.name}:\n`;
+    text += `- Medicine: ${displayName}\n`;
+    text += `- Dose: ${displayDose}\n`;
+    text += `- Time: ${time}`;
+    if (medicine.instructions) text += `\n- Instruction: ${medicine.instructions}`;
+    if (medicine.customInstructions) text += `\n- Usage: ${medicine.customInstructions}`;
 
-    navigator.clipboard.writeText(message).then(() => {
-        setCopiedScheduleId(schedule.id);
-        setTimeout(() => setCopiedScheduleId(null), 2000);
-    });
+    const shareData = {
+        title: `Medicine Reminder for ${profile.name}`,
+        text,
+    };
+
+    try {
+        if (navigator.share) {
+            await navigator.share(shareData);
+        } else {
+            await navigator.clipboard.writeText(shareData.text);
+        }
+        setSharedScheduleId(schedule.id);
+    } catch (error) {
+        console.error('Error sharing:', error);
+    } finally {
+        setTimeout(() => setSharedScheduleId(null), 2000);
+    }
   };
 
   const handleOpenEditModal = async (medicineId: string) => {
@@ -207,7 +214,7 @@ const Dashboard: React.FC<DashboardProps> = ({ profile }) => {
           [DoseStatus.OVERDUE]: { text: 'Overdue', icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg> },
       };
       
-      const isCopied = copiedScheduleId === schedule.id;
+      const isShared = sharedScheduleId === schedule.id;
 
       return (
           <button onClick={() => handleOpenEditModal(schedule.medicineId)} className="w-full text-left focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 rounded-lg" disabled={medicine?.status === 'stopped'}>
@@ -233,13 +240,13 @@ const Dashboard: React.FC<DashboardProps> = ({ profile }) => {
                     )}
                   </div>
                   <button 
-                      onClick={(e) => { e.stopPropagation(); handleCopyToClipboard(schedule); }} 
-                      className={`p-2 rounded-full transition-colors ${isCopied ? 'text-green-500' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
-                      aria-label="Copy reminder details"
+                      onClick={(e) => { e.stopPropagation(); handleShareReminder(schedule); }} 
+                      className={`p-2 rounded-full transition-colors ${isShared ? 'text-green-500' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
+                      aria-label="Share reminder details"
                   >
-                      {isCopied ? 
+                      {isShared ? 
                           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg> :
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12s-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6.002l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.368a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z" /></svg>
                       }
                   </button>
                 </div>
